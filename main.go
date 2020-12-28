@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adrg/xdg"
+	//"github.com/adrg/xdg"
 	"github.com/blang/semver"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -35,6 +35,7 @@ var quit = false
 
 func init() {
 
+  /*
 	if releaseMode == "true" {
 
 		// Redirect STDERR and STDOUT to log.txt in release mode
@@ -56,6 +57,7 @@ func init() {
 	}
 
 	runtime.LockOSThread() // Don't know if this is necessary still
+  */
 }
 
 func main() {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+  "fmt"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -116,7 +117,6 @@ func (whiteboard *Whiteboard) Update() {
 			if MouseReleased(rl.MouseRightButton) {
 				ConsumeMouseInput(rl.MouseRightButton)
 			}
-
 		}
 
 	}
@@ -163,6 +163,9 @@ func (whiteboard *Whiteboard) ToggleEditing() {
 
 func (whiteboard *Whiteboard) Resize(w, h float32) {
 
+
+  fmt.Println("Resize called!");
+
 	ogW, ogH := whiteboard.Width, whiteboard.Height
 
 	whiteboard.Width = int32(w / 2)
@@ -175,6 +178,8 @@ func (whiteboard *Whiteboard) Resize(w, h float32) {
 }
 
 func (whiteboard *Whiteboard) RecreateTexture() {
+
+  fmt.Println("RecreateTexture called!");
 
 	newTex := rl.LoadRenderTexture(whiteboard.Width, whiteboard.Height)
 
@@ -199,6 +204,9 @@ func (whiteboard *Whiteboard) RecreateTexture() {
 }
 
 func (whiteboard *Whiteboard) Copy(other *Whiteboard) {
+
+
+  fmt.Println("whiteboard Copy called!");
 
 	whiteboard.Resize(float32(other.Width*2), float32(other.Height*2))
 	rl.BeginTextureMode(whiteboard.Texture)

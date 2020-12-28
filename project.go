@@ -152,7 +152,7 @@ type Project struct {
 	Boards              []*Board
 	BoardIndex          int
 	BoardPanel          rl.Rectangle
-	ZoomLevel           int
+  Zoom                float32
 	CameraPan           rl.Vector2
 	CameraOffset        rl.Vector2
 	FullyInitialized    bool
@@ -203,7 +203,7 @@ func NewProject() *Project {
 	project := &Project{
 		FilePath:           "",
 		GridSize:           16,
-		ZoomLevel:          3,
+    Zoom:               1.0,
 		CameraPan:          rl.Vector2{0, 0},
 		Searchbar:          searchBar,
 		StatusBar:          rl.Rectangle{0, float32(rl.GetScreenHeight()) - 32, float32(rl.GetScreenWidth()), 32},
@@ -714,7 +714,7 @@ func (project *Project) Save(backup bool) {
 			data, _ = sjson.Set(data, `AutoSave`, project.AutoSave.Checked)
 			data, _ = sjson.Set(data, `Pan\.X`, project.CameraPan.X)
 			data, _ = sjson.Set(data, `Pan\.Y`, project.CameraPan.Y)
-			data, _ = sjson.Set(data, `ZoomLevel`, project.ZoomLevel)
+			data, _ = sjson.Set(data, `Zoom`, project.Zoom)
 			data, _ = sjson.Set(data, `ColorTheme`, currentTheme)
 			data, _ = sjson.Set(data, `TaskTransparency`, project.TaskTransparency.Number())
 			data, _ = sjson.Set(data, `OutlineTasks`, project.OutlineTasks.Checked)
@@ -847,7 +847,7 @@ func LoadProject(filepath string) *Project {
 			project.GridSize = int32(getInt(`GridSize`))
 			project.CameraPan.X = getFloat(`Pan\.X`)
 			project.CameraPan.Y = getFloat(`Pan\.Y`)
-			project.ZoomLevel = getInt(`ZoomLevel`)
+			project.Zoom = getFloat(`Zoom`)
 			project.SampleRate.SetChoice(getString(`SampleRate`))
 			project.SampleBuffer = getInt(`SampleBuffer`)
 			project.TaskShadowSpinner.CurrentChoice = getInt(`TaskShadow`)
@@ -1016,30 +1016,24 @@ func (project *Project) HandleCamera() {
 	wheel := rl.GetMouseWheelMove()
 
 	if !project.ContextMenuOpen && !project.TaskOpen && project.PopupAction == "" && !project.ProjectSettingsOpen {
+    zoom_dx := float32(0.0)
+
 		if wheel > 0 {
-			project.ZoomLevel++
+      zoom_dx = 1.0
 		} else if wheel < 0 {
-			project.ZoomLevel--
+      zoom_dx = -1.0
 		}
+
+    if zoom_dx != 0 {
+      project.Zoom += project.Zoom * 0.1 * zoom_dx;
+    }
 	}
 
-	zoomLevels := []float32{0.1, 0.25, 0.5, 1, 2, 3, 4, 6, 8, 10}
+  if project.Zoom < 0.0001 {
+    project.Zoom = 0.0001
+  }
 
-	if project.ZoomLevel >= len(zoomLevels) {
-		project.ZoomLevel = len(zoomLevels) - 1
-	}
-
-	if project.ZoomLevel < 0 {
-		project.ZoomLevel = 0
-	}
-
-	targetZoom := zoomLevels[project.ZoomLevel]
-
-	camera.Zoom += (targetZoom - camera.Zoom) * (project.GetFrameTime() * 12)
-
-	if math.Abs(float64(targetZoom-camera.Zoom)) < 0.001 {
-		camera.Zoom = targetZoom
-	}
+	camera.Zoom = project.Zoom
 
 	if MouseDown(rl.MouseMiddleButton) {
 		diff := GetMouseDelta()
@@ -1061,7 +1055,6 @@ func (project *Project) HandleCamera() {
 
 	camera.Offset.X = float32(rl.GetScreenWidth() / 2)
 	camera.Offset.Y = float32(rl.GetScreenHeight() / 2)
-
 }
 
 func (project *Project) MousingOver() string {
@@ -1539,24 +1532,6 @@ func (project *Project) Shortcuts() {
 						project.BoardIndex = 9
 						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
-				} else if keybindings.On(KBZoomLevel10) {
-					project.ZoomLevel = 0
-				} else if keybindings.On(KBZoomLevel25) {
-					project.ZoomLevel = 1
-				} else if keybindings.On(KBZoomLevel50) {
-					project.ZoomLevel = 2
-				} else if keybindings.On(KBZoomLevel100) {
-					project.ZoomLevel = 3
-				} else if keybindings.On(KBZoomLevel200) {
-					project.ZoomLevel = 4
-				} else if keybindings.On(KBZoomLevel400) {
-					project.ZoomLevel = 6
-				} else if keybindings.On(KBZoomLevel1000) {
-					project.ZoomLevel = 9
-				} else if keybindings.On(KBZoomIn) {
-					project.ZoomLevel++
-				} else if keybindings.On(KBZoomOut) {
-					project.ZoomLevel--
 				} else if keybindings.On(KBCenterView) {
 					project.CameraPan.X = 0
 					project.CameraPan.Y = 0

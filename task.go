@@ -729,8 +729,9 @@ func (task *Task) Update() {
 	}
 
 	if task.Dragging && MouseReleased(rl.MouseLeftButton) {
-		task.Board.SendMessage(MessageDropped, nil)
-		task.Board.ReorderTasks()
+		//task.Board.SendMessage(MessageDropped, nil)
+    task.Dragging = false
+		//task.Board.ReorderTasks()
 	}
 
 	if !task.Dragging || task.Resizing {
@@ -824,10 +825,10 @@ func (task *Task) Update() {
 		task.ResizeRect.Width = 8
 		task.ResizeRect.Height = 8
 
-		if task.Board.Project.ZoomLevel <= 1 && task.Image.Width >= 32 && task.Image.Height >= 32 {
-			task.ResizeRect.Width *= 2
-			task.ResizeRect.Height *= 2
-		}
+		//if task.Board.Project.ZoomLevel <= 1 && task.Image.Width >= 32 && task.Image.Height >= 32 {
+		//	task.ResizeRect.Width *= 2
+		//	task.ResizeRect.Height *= 2
+		//}
 
 		task.ResizeRect.X += task.Rect.Width - task.ResizeRect.Width
 		task.ResizeRect.Y += task.Rect.Height - task.ResizeRect.Height
@@ -1276,27 +1277,27 @@ func (task *Task) Draw() {
 
 	// Lines don't get a background
 	if !task.Is(TASK_TYPE_LINE) {
-		rl.DrawRectangleRec(bgRect, color)
+		//rl.DrawRectangleRec(bgRect, color)
 	}
 
-	if task.Board.Project.DeadlineAnimation.CurrentChoice < 4 {
-		if task.Due() == TASK_DUE_TODAY {
-			src := rl.Rectangle{208 + rl.GetTime()*30, 0, task.Rect.Width, task.Rect.Height}
-			dst := task.Rect
-			rl.DrawTexturePro(task.Board.Project.Patterns, src, dst, rl.Vector2{}, 0, getThemeColor(GUI_INSIDE_HIGHLIGHTED))
-		} else if task.Due() == TASK_DUE_LATE {
-			src := rl.Rectangle{208 + rl.GetTime()*120, 16, task.Rect.Width, task.Rect.Height}
-			dst := task.Rect
-			rl.DrawTexturePro(task.Board.Project.Patterns, src, dst, rl.Vector2{}, 0, getThemeColor(GUI_INSIDE_HIGHLIGHTED))
-		}
-	}
+	//if task.Board.Project.DeadlineAnimation.CurrentChoice < 4 {
+	//	if task.Due() == TASK_DUE_TODAY {
+	//		src := rl.Rectangle{208 + rl.GetTime()*30, 0, task.Rect.Width, task.Rect.Height}
+	//		dst := task.Rect
+	//		rl.DrawTexturePro(task.Board.Project.Patterns, src, dst, rl.Vector2{}, 0, getThemeColor(GUI_INSIDE_HIGHLIGHTED))
+	//	} else if task.Due() == TASK_DUE_LATE {
+	//		src := rl.Rectangle{208 + rl.GetTime()*120, 16, task.Rect.Width, task.Rect.Height}
+	//		dst := task.Rect
+	//		rl.DrawTexturePro(task.Board.Project.Patterns, src, dst, rl.Vector2{}, 0, getThemeColor(GUI_INSIDE_HIGHLIGHTED))
+	//	}
+	//}
 
 	if task.PercentageComplete != 0 {
 		rect := task.Rect
 		rect.Width *= task.PercentageComplete
 		rectColor := applyGlow(getThemeColor(GUI_INSIDE_HIGHLIGHTED))
 		rectColor.A = alpha
-		rl.DrawRectangleRec(rect, rectColor)
+		//rl.DrawRectangleRec(rect, rectColor)
 	}
 
 	if task.Is(TASK_TYPE_IMAGE) {

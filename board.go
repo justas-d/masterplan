@@ -428,6 +428,8 @@ func (board *Board) PasteContent() {
 
 func (board *Board) ReorderTasks() {
 
+  return
+
 	sort.Slice(board.Tasks, func(i, j int) bool {
 		ba := board.Tasks[i]
 		bb := board.Tasks[j]
