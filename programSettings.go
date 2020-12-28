@@ -30,7 +30,6 @@ type ProgramSettings struct {
 	BorderlessWindow          bool
 	WindowPosition            rl.Rectangle
 	SaveWindowPosition        bool
-	ScrollwheelSensitivity    int
 	SmoothPanning             bool
 	CustomFontPath            string
 	FontSize                  int
@@ -49,7 +48,6 @@ func NewProgramSettings() ProgramSettings {
 		Keybindings:            NewKeybindings(),
 		FontSize:               15,
 		GUIFontSizeMultiplier:  GUI_FONT_SIZE_200,
-		ScrollwheelSensitivity: 1,
 	}
 	return ps
 }

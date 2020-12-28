@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/goware/urlx"
-	"github.com/pkg/browser"
 	"github.com/tanema/gween"
 	"github.com/tanema/gween/ease"
 	"github.com/tidwall/gjson"
@@ -47,7 +46,6 @@ const (
 	SETTINGS_AUDIO
 	SETTINGS_GLOBAL
 	SETTINGS_KEYBOARD
-	SETTINGS_ABOUT
 )
 
 const (
@@ -119,11 +117,7 @@ type Project struct {
 	IncompleteTasksGlow         *Checkbox
 	CompleteTasksGlow           *Checkbox
 	SelectedTasksGlow           *Checkbox
-	AboutDiscordButton          *Button
-	AboutTwitterButton          *Button
-	AboutForumsButton           *Button
 	StorePageButton             *Button
-	DisableAboutDialogOnStart   *Checkbox
 	SaveWindowPosition          *Checkbox
 	AutoReloadResources         *Checkbox
 	TargetFPS                   *NumberSpinner
@@ -138,7 +132,6 @@ type Project struct {
 	RebindingHeldKeys           []int32
 	GraphicalTasksTransparent   *Checkbox
 	DeadlineAnimation           *ButtonGroup
-	ScrollwheelSensitivity      *NumberSpinner
 	SmoothPanning               *Checkbox
 	CustomFontPath              *Textbox
 	CustomFontPathBrowseButton  *Button
@@ -235,7 +228,7 @@ func NewProject() *Project {
 		MaxUndoSteps:                NewNumberSpinner(0, 0, 192, 40),
 		TaskTransparency:            NewNumberSpinner(0, 0, 128, 40),
 		AlwaysShowURLButtons:        NewCheckbox(0, 0, 32, 32),
-		SettingsSection:             NewButtonGroup(0, 0, 700, 32, 1, "General", "Tasks", "Audio", "Global", "Shortcuts", "About"),
+		SettingsSection:             NewButtonGroup(0, 0, 700, 32, 1, "General", "Tasks", "Audio", "Global", "Shortcuts"),
 		RebindingButtons:            []*Button{},
 		DefaultRebindingButtons:     []*Button{},
 		RebindingHeldKeys:           []int32{},
@@ -259,15 +252,9 @@ func NewProject() *Project {
 		AutoReloadResources:    NewCheckbox(0, 0, 32, 32),
 		TargetFPS:              NewNumberSpinner(0, 0, 128, 40),
 		UnfocusedFPS:           NewNumberSpinner(0, 0, 128, 40),
-		ScrollwheelSensitivity: NewNumberSpinner(0, 0, 128, 40),
 		SmoothPanning:          NewCheckbox(0, 0, 32, 32),
 		DefaultFontButton:      NewButton(0, 0, 256, 24, "Reset Text to Defaults", false),
 
-		AboutDiscordButton:        NewButton(0, 0, 128, 24, "Discord", false),
-		AboutForumsButton:         NewButton(0, 0, 128, 24, "Forums", false),
-		AboutTwitterButton:        NewButton(0, 0, 128, 24, "Twitter", false),
-		StorePageButton:           NewButton(0, 0, 128, 24, "Purchase", false),
-		DisableAboutDialogOnStart: NewCheckbox(0, 0, 32, 32),
 		TransparentBackground:     NewCheckbox(0, 0, 32, 32),
 		BorderlessWindow:          NewCheckbox(0, 0, 32, 32),
 		SaveWindowPosition:        NewCheckbox(0, 0, 32, 32),
@@ -286,7 +273,6 @@ func NewProject() *Project {
 	row := column.Row()
 	row.Item(NewButton(0, 0, 128, 32, "Accept", false)).Name = "accept button"
 	row.Item(NewButton(0, 0, 128, 32, "Cancel", false)).Name = "cancel button"
-	project.PopupPanel.EnableScrolling = false
 	project.PopupPanel.Center(0.5, 0.5)
 
 	project.CustomFontPath.VerticalAlignment = ALIGN_CENTER
@@ -449,10 +435,6 @@ func NewProject() *Project {
 	row.Item(project.DisableMessageLog, SETTINGS_GLOBAL)
 
 	row = column.Row()
-	row.Item(NewLabel("Scroll-wheel sensitivity:"), SETTINGS_GLOBAL)
-	row.Item(project.ScrollwheelSensitivity, SETTINGS_GLOBAL)
-
-	row = column.Row()
 	row.Item(NewLabel("Smooth camera panning:"), SETTINGS_GLOBAL)
 	row.Item(project.SmoothPanning, SETTINGS_GLOBAL)
 
@@ -506,75 +488,6 @@ func NewProject() *Project {
 	row = column.Row()
 	row.Item(project.DefaultFontButton, SETTINGS_GLOBAL)
 
-	// About
-
-	if demoMode == "" {
-
-		row = column.Row()
-		row.Item(NewLabel(`"Hello! Thank you for purchasing and using MasterPlan! I truly do appreciate`), SETTINGS_ABOUT)
-
-		row = column.Row()
-		row.Item(NewLabel(`your support, and hope MasterPlan becomes a true aid in your creative process.`), SETTINGS_ABOUT)
-
-		row = column.Row()
-		row.Item(NewLabel(`While it is still in development, please feel free to talk about MasterPlan with others,`), SETTINGS_ABOUT)
-
-		row = column.Row()
-		row.Item(NewLabel(`and share your feedback with me as you use it. Thank you, again!" ~ SolarLune`), SETTINGS_ABOUT)
-
-	} else {
-
-		row = column.Row()
-		row.Item(NewLabel(`"Hello! Thank you for trying out MasterPlan! I truly do appreciate it.`), SETTINGS_ABOUT)
-
-		row = column.Row()
-		row.Item(NewLabel(`In this free demo, you can fully try out MasterPlan; only saving is disabled.`), SETTINGS_ABOUT)
-
-		row = column.Row()
-		row.Item(NewLabel(`Hopefully you will find it useful and you'll consider supporting development by`), SETTINGS_ABOUT)
-
-		row = column.Row()
-		row.Item(NewLabel(`purchasing it. You can click the below button to head to the store page."`), SETTINGS_ABOUT)
-
-		row = column.Row()
-		row.Item(NewLabel(`"Thank you!" ~ SolarLune`), SETTINGS_ABOUT)
-
-		row = column.Row()
-		project.StorePageButton.IconSrcRec = rl.Rectangle{16, 48, 16, 16}
-		row.Item(project.StorePageButton, SETTINGS_ABOUT)
-
-	}
-
-	row = column.Row()
-	row.Item(NewLabel(""), SETTINGS_ABOUT)
-
-	row = column.Row()
-	row.Item(NewLabel("Community / Social Media:"), SETTINGS_ABOUT)
-
-	row = column.Row()
-
-	project.AboutForumsButton.IconSrcRec = rl.Rectangle{16, 48, 16, 16}
-	row.Item(project.AboutForumsButton, SETTINGS_ABOUT)
-
-	project.AboutDiscordButton.IconSrcRec = rl.Rectangle{0, 48, 16, 16}
-	row.Item(project.AboutDiscordButton, SETTINGS_ABOUT)
-
-	project.AboutTwitterButton.IconSrcRec = rl.Rectangle{32, 48, 16, 16}
-	row.Item(project.AboutTwitterButton, SETTINGS_ABOUT)
-
-	row = column.Row()
-	row.Item(NewLabel(""), SETTINGS_ABOUT)
-
-	row = column.Row()
-	row.Item(NewLabel("Don't open this window\nat program start:"), SETTINGS_ABOUT)
-	row.Item(project.DisableAboutDialogOnStart, SETTINGS_ABOUT)
-
-	row = column.Row()
-	row.Item(NewLabel(""), SETTINGS_ABOUT)
-
-	row = column.Row()
-	row.Item(NewLabel("MasterPlan v"+softwareVersion.String()+demoMode), SETTINGS_ABOUT)
-
 	project.Boards = []*Board{NewBoard(project)}
 
 	project.OutlineTasks.Checked = true
@@ -604,10 +517,6 @@ func NewProject() *Project {
 
 	project.UnfocusedFPS.SetNumber(10)
 	project.UnfocusedFPS.Minimum = 1
-
-	project.ScrollwheelSensitivity.SetNumber(1)
-	project.ScrollwheelSensitivity.Minimum = 1
-	project.ScrollwheelSensitivity.Maximum = 10
 
 	project.AutomaticBackupInterval.SetNumber(15) // Seems sensible to make new projects have this as a default.
 	project.AutomaticBackupInterval.Minimum = 0
@@ -1926,7 +1835,6 @@ func (project *Project) GUI() {
 				"Paste Tasks",
 				"Paste Content",
 				"Take Screenshot",
-				"Open Tutorial",
 				"Quit MasterPlan",
 			}
 
@@ -2054,15 +1962,6 @@ func (project *Project) GUI() {
 					case "Take Screenshot":
 						takeScreenshot = true
 
-					case "Open Tutorial":
-						startingPlanPath := GetPath("assets", "help_manual.plan")
-						if project.Modified {
-							project.PopupAction = ActionLoadProject
-							project.PopupArgument = startingPlanPath
-						} else {
-							project.ExecuteDestructiveAction(ActionLoadProject, startingPlanPath)
-						}
-
 					case "Quit MasterPlan":
 						if project.Modified {
 							project.PopupAction = ActionQuit
@@ -2101,22 +2000,6 @@ func (project *Project) GUI() {
 					t.UpdateSoundVolume()
 				}
 
-			}
-
-			if project.StorePageButton.Clicked {
-				browser.OpenURL("https://solarlune.itch.io/masterplan")
-			}
-
-			if project.AboutForumsButton.Clicked {
-				browser.OpenURL("https://solarlune.itch.io/masterplan/community")
-			}
-
-			if project.AboutDiscordButton.Clicked {
-				browser.OpenURL("https://discord.gg/tRVf7qd")
-			}
-
-			if project.AboutTwitterButton.Clicked {
-				browser.OpenURL("https://twitter.com/MasterPlanApp")
 			}
 
 			if project.SettingsSection.CurrentChoice == SETTINGS_KEYBOARD {
@@ -2202,7 +2085,6 @@ func (project *Project) GUI() {
 				project.GUIFontSizeMultiplier.SetChoice(GUI_FONT_SIZE_200)
 			}
 
-			programSettings.ScrollwheelSensitivity = project.ScrollwheelSensitivity.Number()
 			programSettings.SmoothPanning = project.SmoothPanning.Checked
 			programSettings.FontSize = project.FontSize.Number()
 			programSettings.GUIFontSizeMultiplier = project.GUIFontSizeMultiplier.ChoiceAsString()
@@ -2245,7 +2127,6 @@ func (project *Project) GUI() {
 				programSettings.DisableSplashscreen = project.DisableSplashscreen.Checked
 				programSettings.AutoReloadThemes = project.AutoReloadThemes.Checked
 				programSettings.DisableMessageLog = project.DisableMessageLog.Checked
-				programSettings.DisableAboutDialogOnStart = project.DisableAboutDialogOnStart.Checked
 				programSettings.SaveWindowPosition = project.SaveWindowPosition.Checked
 				programSettings.AutoReloadResources = project.AutoReloadResources.Checked
 				programSettings.TargetFPS = project.TargetFPS.Number()
@@ -2286,87 +2167,17 @@ func (project *Project) GUI() {
 
 			// Status bar
 
-			project.StatusBar.Y = float32(rl.GetScreenHeight()) - project.StatusBar.Height
-			project.StatusBar.Width = float32(rl.GetScreenWidth())
-
-			rl.DrawRectangleRec(project.StatusBar, getThemeColor(GUI_INSIDE))
-			rl.DrawLine(int32(project.StatusBar.X), int32(project.StatusBar.Y-1), int32(project.StatusBar.X+project.StatusBar.Width), int32(project.StatusBar.Y-1), getThemeColor(GUI_OUTLINE))
-
-			taskCount := 0
-			completionCount := 0
-
-			for _, t := range project.CurrentBoard().Tasks {
-
-				if t.Completable() {
-					taskCount++
-				}
-				if t.Complete() {
-					completionCount++
-				}
-
-			}
-
-			percentage := int32(0)
-			if taskCount > 0 && completionCount > 0 {
-				percentage = int32(float32(completionCount) / float32(taskCount) * 100)
-			}
-
-			DrawGUIText(rl.Vector2{6, project.StatusBar.Y - 2}, "%d / %d Tasks completed (%d%%)", completionCount, taskCount, percentage)
-
 			todayText := time.Now().Format("Monday, January 2, 2006, 15:04:05")
 			textLength := rl.MeasureTextEx(font, todayText, float32(GUIFontSize()), spacing)
-			pos := rl.Vector2{float32(rl.GetScreenWidth())/2 - textLength.X/2, project.StatusBar.Y - 2}
+			pos := rl.Vector2{0,0}
+
+      pos.X = float32(rl.GetScreenWidth()) * 0.5 - textLength.X * 0.5
+      pos.Y = float32(rl.GetScreenHeight()) - textLength.Y
+
 			pos.X = float32(int(pos.X))
 			pos.Y = float32(int(pos.Y))
 
 			DrawGUIText(pos, todayText)
-
-			// Search bar
-
-			project.Searchbar.Rect.Y = project.StatusBar.Y + 1
-			project.Searchbar.Rect.X = float32(rl.GetScreenWidth()) - (project.Searchbar.Rect.Width + 16)
-
-			rl.DrawTextureRec(project.GUI_Icons, rl.Rectangle{128, 0, 16, 16}, rl.Vector2{project.Searchbar.Rect.X - 24, project.Searchbar.Rect.Y + 4}, getThemeColor(GUI_OUTLINE_HIGHLIGHTED))
-
-			clickedOnSearchbar := false
-
-			searchbarWasFocused := project.Searchbar.Focused
-
-			project.Searchbar.Update()
-			project.Searchbar.Draw()
-
-			if project.Searchbar.Focused && !searchbarWasFocused {
-				clickedOnSearchbar = true
-			}
-
-			if project.Searchbar.Text() != "" {
-
-				if project.Searchbar.Changed || clickedOnSearchbar {
-					project.SearchForTasks()
-				}
-
-				searchTextPosX := project.Searchbar.Rect.X - 96
-				searchCount := "0/0"
-				if len(project.SearchedTasks) > 0 {
-					searchCount = fmt.Sprintf("%d / %d", project.FocusedSearchTask+1, len(project.SearchedTasks))
-				}
-				textMeasure := rl.MeasureTextEx(font, searchCount, float32(GUIFontSize()), spacing)
-				textMeasure.X = float32(int(textMeasure.X / 2))
-				textMeasure.Y = float32(int(textMeasure.Y / 2))
-
-				if ImmediateButton(rl.Rectangle{searchTextPosX - textMeasure.X - 42, project.Searchbar.Rect.Y, project.Searchbar.Rect.Height, project.Searchbar.Rect.Height}, "<", len(project.SearchedTasks) == 0) {
-					project.FocusedSearchTask--
-					project.SearchForTasks()
-				}
-
-				DrawGUIText(rl.Vector2{searchTextPosX - textMeasure.X, project.Searchbar.Rect.Y - 2}, searchCount)
-
-				if ImmediateButton(rl.Rectangle{searchTextPosX + textMeasure.X + 12, project.Searchbar.Rect.Y, project.Searchbar.Rect.Height, project.Searchbar.Rect.Height}, ">", len(project.SearchedTasks) == 0) {
-					project.FocusedSearchTask++
-					project.SearchForTasks()
-				}
-
-			}
 
 			// Boards
 
@@ -2846,12 +2657,10 @@ func (project *Project) OpenSettings() {
 	project.DisableSplashscreen.Checked = programSettings.DisableSplashscreen
 	project.AutoReloadThemes.Checked = programSettings.AutoReloadThemes
 	project.DisableMessageLog.Checked = programSettings.DisableMessageLog
-	project.DisableAboutDialogOnStart.Checked = programSettings.DisableAboutDialogOnStart
 	project.SaveWindowPosition.Checked = programSettings.SaveWindowPosition
 	project.AutoReloadResources.Checked = programSettings.AutoReloadResources
 	project.TargetFPS.SetNumber(programSettings.TargetFPS)
 	project.UnfocusedFPS.SetNumber(programSettings.UnfocusedFPS)
-	project.ScrollwheelSensitivity.SetNumber(programSettings.ScrollwheelSensitivity)
 	project.SmoothPanning.Checked = programSettings.SmoothPanning
 	project.BorderlessWindow.Checked = programSettings.BorderlessWindow
 	project.TransparentBackground.Checked = programSettings.TransparentBackground

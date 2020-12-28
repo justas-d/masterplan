@@ -15,7 +15,6 @@ import (
 
 	"github.com/atotto/clipboard"
 	rl "github.com/gen2brain/raylib-go/raylib"
-	"github.com/tanema/gween/ease"
 )
 
 const (
@@ -514,7 +513,7 @@ func (panel *Panel) Update() {
 			mouseWheel = -4
 		}
 
-		panel.Scrollbar.Scroll(mouseWheel * chunk * float32(programSettings.ScrollwheelSensitivity))
+		panel.Scrollbar.Scroll(mouseWheel * chunk * 0.5)
 		scroll = panel.Scrollbar.ScrollAmount * totalScroll
 
 	}
@@ -813,7 +812,6 @@ type Scrollbar struct {
 	Rect         rl.Rectangle
 	Horizontal   bool
 	ScrollAmount float32
-	TargetScroll float32
 }
 
 func NewScrollbar(x, y, w, h float32) *Scrollbar {
@@ -843,15 +841,12 @@ func (scrollBar *Scrollbar) Draw() {
 		scrollBox.Y = scrollBar.Rect.Y + scrollBar.Rect.Height - scrollBox.Height
 	}
 
-	if MouseDown(rl.MouseLeftButton) && rl.CheckCollisionPointRec(GetMousePosition(), scrollBar.Rect) {
-		scrollBar.TargetScroll = ease.Linear(
-			GetMousePosition().Y-scrollBar.Rect.Y-(scrollBox.Height/2),
-			0,
-			1,
-			scrollBar.Rect.Height-(scrollBox.Height))
-	}
+	ImmediateButton(scrollBox, "", false)
 
-	scrollBar.ScrollAmount += (scrollBar.TargetScroll - scrollBar.ScrollAmount) * 0.15
+}
+
+func (scrollBar *Scrollbar) Scroll(scroll float32) {
+  scrollBar.ScrollAmount += scroll
 
 	if scrollBar.ScrollAmount < 0 {
 		scrollBar.ScrollAmount = 0
@@ -859,22 +854,6 @@ func (scrollBar *Scrollbar) Draw() {
 	if scrollBar.ScrollAmount > 1 {
 		scrollBar.ScrollAmount = 1
 	}
-
-	ImmediateButton(scrollBox, "", false)
-
-}
-
-func (scrollBar *Scrollbar) Scroll(scroll float32) {
-
-	scrollBar.TargetScroll += scroll
-
-	if scrollBar.TargetScroll < 0 {
-		scrollBar.TargetScroll = 0
-	}
-	if scrollBar.TargetScroll > 1 {
-		scrollBar.TargetScroll = 1
-	}
-
 }
 
 type GUIElement interface {
