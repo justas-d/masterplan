@@ -387,7 +387,7 @@ func (board *Board) PasteContent() {
         return
       }
 
-      fmt.Printf("Saved image to '%s'", save_path)
+      fmt.Printf("Saved image to '%s'\n", save_path)
 
       task := board.CreateNewTask()
       task.TaskType.CurrentChoice = TASK_TYPE_IMAGE

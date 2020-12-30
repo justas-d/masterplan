@@ -21,7 +21,6 @@ const (
 	TASK_TYPE_NOTE = iota
 	TASK_TYPE_IMAGE
 	TASK_TYPE_LINE
-	TASK_TYPE_WHITEBOARD
 )
 
 type URLButton struct {
@@ -85,8 +84,6 @@ type Task struct {
 	DisplayedText                  string
 	URLButtons                     []URLButton
 	SuccessfullyLoadedResourceOnce bool
-
-	Whiteboard *Whiteboard
 }
 
 func NewTask(board *Board) *Task {
@@ -96,7 +93,7 @@ func NewTask(board *Board) *Task {
 	task := &Task{
 		Rect:                         rl.Rectangle{0, 0, 16, 16},
 		Board:                        board,
-		TaskType:                     NewButtonGroup(0, 32, 500, 32, 2, "Note", "Image", "Line", "Whiteboard"),
+		TaskType:                     NewButtonGroup(0, 32, 500, 32, 2, "Note", "Image", "Line"),
 		Description:                  NewTextbox(postX, 64, 512, 32),
 		NumberingPrefix:              []int{-1},
 		ID:                           board.Project.FirstFreeID(),
@@ -206,11 +203,6 @@ func (task *Task) Clone() *Task {
 
 	copyData.SetPanel()
 
-	if task.Whiteboard != nil {
-		copyData.Whiteboard = NewWhiteboard(&copyData)
-		copyData.Whiteboard.Copy(task.Whiteboard)
-	}
-
 	return &copyData
 }
 
@@ -263,8 +255,6 @@ func (task *Task) Serialize() string {
       jtype = "image"
     } else if task.TaskType.CurrentChoice == TASK_TYPE_LINE {
       jtype = "line"
-    } else if task.TaskType.CurrentChoice == TASK_TYPE_WHITEBOARD {
-      jtype = "whiteboard"
     } else if task.TaskType.CurrentChoice == TASK_TYPE_NOTE {
       jtype = "note"
     }
@@ -293,10 +283,6 @@ func (task *Task) Serialize() string {
 
 		}
 
-	}
-
-	if task.Is(TASK_TYPE_WHITEBOARD) && task.Whiteboard != nil {
-		jsonData, _ = sjson.Set(jsonData, `Whiteboard`, task.Whiteboard.Serialize())
 	}
 
 	return jsonData
@@ -380,8 +366,6 @@ func (task *Task) Deserialize(jsonData string) {
       task.TaskType.CurrentChoice = TASK_TYPE_IMAGE
     } else if jtype == "line" {
       task.TaskType.CurrentChoice = TASK_TYPE_LINE
-    } else if jtype == "whiteboard" {
-      task.TaskType.CurrentChoice = TASK_TYPE_WHITEBOARD
     } else if jtype == "note" {
       task.TaskType.CurrentChoice = TASK_TYPE_NOTE
     }
@@ -408,36 +392,14 @@ func (task *Task) Deserialize(jsonData string) {
 		}
 	}
 
-	if hasData(`Whiteboard`) {
-
-		if task.Whiteboard == nil {
-			task.Whiteboard = NewWhiteboard(task)
-		}
-
-		task.Whiteboard.Resize(task.DisplaySize.X, task.DisplaySize.Y-float32(task.Board.Project.GridSize))
-
-		wbData := []string{}
-		for _, row := range gjson.Get(jsonData, `Whiteboard`).Array() {
-			wbData = append(wbData, row.String())
-		}
-
-		task.Whiteboard.Deserialize(wbData)
-
-	}
-
 	// We do this to update the task after loading all of the information.
 	task.LoadResource()
 }
 
 func (task *Task) Update() {
 
-	if task.Is(TASK_TYPE_WHITEBOARD) {
-		task.MinSize = rl.Vector2{128, 80}
-		task.MaxSize = rl.Vector2{512, 512 + 16}
-	} else {
-		task.MinSize = rl.Vector2{16, 16}
-		task.MaxSize = rl.Vector2{0, 0}
-	}
+  task.MinSize = rl.Vector2{16, 16}
+  task.MaxSize = rl.Vector2{0, 0}
 
 	if task.Selected && task.Dragging && !task.Resizing {
 		delta := rl.Vector2Subtract(GetWorldMousePosition(), task.MouseDragStart)
@@ -567,17 +529,8 @@ func (task *Task) Update() {
 				task.DisplaySize.X = float32(task.Image.Width)
 				task.DisplaySize.Y = float32(task.Image.Height)
 			}
-
-		case TASK_TYPE_WHITEBOARD:
-			if task.Whiteboard != nil {
-				iy := task.DisplaySize.Y - float32(task.Board.Project.GridSize)
-				task.Whiteboard.Resize(task.DisplaySize.X, iy)
-			}
-
 		}
-
 	}
-
 }
 
 func (task *Task) DrawLine() {
@@ -640,7 +593,7 @@ func (task *Task) Draw() {
 
 	taskDisplaySize := task.DisplaySize
 
-	if !task.Is(TASK_TYPE_IMAGE, TASK_TYPE_WHITEBOARD) {
+	if !task.Is(TASK_TYPE_IMAGE) {
 
 		taskDisplaySize = rl.MeasureTextEx(font, name, float32(programSettings.FontSize), spacing)
 
@@ -680,7 +633,7 @@ func (task *Task) Draw() {
 		taskDisplaySize.Y = task.MaxSize.Y
 	}
 
-	if (task.Is(TASK_TYPE_IMAGE) && task.Image.ID != 0) || task.Is(TASK_TYPE_WHITEBOARD) {
+	if (task.Is(TASK_TYPE_IMAGE) && task.Image.ID != 0) {
 		if task.Rect.Width != taskDisplaySize.X || task.Rect.Height != taskDisplaySize.Y {
 			task.Rect.Width = taskDisplaySize.X
 			task.Rect.Height = taskDisplaySize.Y
@@ -730,16 +683,6 @@ func (task *Task) Draw() {
 		color.A = 32 + alpha
 	}
 
-	bgRect := task.Rect
-	if task.Is(TASK_TYPE_WHITEBOARD) {
-		bgRect.Height = 16 // For a Map, the background is effectively transparent
-	}
-
-	// Lines don't get a background
-	if !task.Is(TASK_TYPE_LINE) {
-		//rl.DrawRectangleRec(bgRect, color)
-	}
-
 	//if task.Board.Project.DeadlineAnimation.CurrentChoice < 4 {
 	//	if task.Due() == TASK_DUE_TODAY {
 	//		src := rl.Rectangle{208 + rl.GetTime()*30, 0, task.Rect.Width, task.Rect.Height}
@@ -779,25 +722,6 @@ func (task *Task) Draw() {
 
 	}
 
-	if task.Is(TASK_TYPE_WHITEBOARD) && task.Whiteboard != nil {
-
-		task.Whiteboard.Update()
-
-		y := task.Rect.Y + float32(task.Board.Project.GridSize)
-		rl.DrawLineEx(rl.Vector2{task.Rect.X, y}, rl.Vector2{task.Rect.X + task.Rect.Width, y}, 1, getThemeColor(GUI_OUTLINE))
-
-		gs := float32(task.Board.Project.GridSize)
-		src := rl.Rectangle{0, 0, float32(task.Whiteboard.Texture.Texture.Width), -float32(task.Whiteboard.Texture.Texture.Height)}
-		dst := rl.Rectangle{task.Rect.X, task.Rect.Y + gs, float32(task.Whiteboard.Texture.Texture.Width * 2), float32(task.Whiteboard.Texture.Texture.Height * 2)}
-
-		color := rl.White
-		if task.Board.Project.GraphicalTasksTransparent.Checked {
-			color.A = alpha
-		}
-		rl.DrawTexturePro(task.Whiteboard.Texture.Texture, src, dst, rl.Vector2{}, 0, color)
-
-	}
-
 	if task.Resizeable() && task.Selected && (!task.Is(TASK_TYPE_IMAGE) || task.Image.ID > 0) {
 		// Only valid images or other resizeable Task Types can be resized
 
@@ -820,7 +744,7 @@ func (task *Task) Draw() {
 	if task.Board.Project.OutlineTasks.Checked && !task.Is(TASK_TYPE_LINE) {
 		rl.DrawRectangleLinesEx(task.Rect, 1, outlineColor)
 	}
-	if !task.Is(TASK_TYPE_IMAGE, TASK_TYPE_LINE, TASK_TYPE_WHITEBOARD) {
+	if !task.Is(TASK_TYPE_IMAGE, TASK_TYPE_LINE) {
 
 		textPos := rl.Vector2{task.Rect.X + 2, task.Rect.Y + 2}
 
@@ -869,7 +793,6 @@ func (task *Task) Draw() {
 			TASK_TYPE_NOTE:        {64, 0},
 			TASK_TYPE_IMAGE:       {96, 0},
 			TASK_TYPE_LINE:        {128, 32},
-			TASK_TYPE_WHITEBOARD:  {64, 16},
 		}
 
 		iconSrc.X = iconSrcIconPositions[task.TaskType.CurrentChoice][0]
@@ -956,9 +879,7 @@ func (task *Task) Depth() int {
 
 	depth := 0
 
-	if task.Is(TASK_TYPE_WHITEBOARD) {
-		depth = -100
-	} else if task.Is(TASK_TYPE_LINE) {
+  if task.Is(TASK_TYPE_LINE) {
 		depth = 100
 	}
 
@@ -1013,33 +934,6 @@ func (task *Task) PostDraw() {
 
 		}
 
-		if task.Whiteboard != nil {
-
-			shiftLeft := task.EditPanel.FindItems("shift left")[0].Element.(*Button)
-			shiftRight := task.EditPanel.FindItems("shift right")[0].Element.(*Button)
-			shiftUp := task.EditPanel.FindItems("shift up")[0].Element.(*Button)
-			shiftDown := task.EditPanel.FindItems("shift down")[0].Element.(*Button)
-
-			if shiftLeft.Clicked {
-				task.Whiteboard.Shift(-8, 0)
-			} else if shiftRight.Clicked {
-				task.Whiteboard.Shift(8, 0)
-			} else if shiftUp.Clicked {
-				task.Whiteboard.Shift(0, -8)
-			} else if shiftDown.Clicked {
-				task.Whiteboard.Shift(0, 8)
-			}
-
-			if clear := task.EditPanel.FindItems("clear")[0].Element.(*Button); clear.Clicked {
-				task.Whiteboard.Clear()
-			}
-
-			if invert := task.EditPanel.FindItems("invert")[0].Element.(*Button); invert.Clicked {
-				task.Whiteboard.Invert()
-			}
-
-		}
-
 		if task.EditPanel.Exited {
 			task.ReceiveMessage(MessageTaskClose, nil)
 		}
@@ -1049,7 +943,7 @@ func (task *Task) PostDraw() {
 }
 
 func (task *Task) Resizeable() bool {
-	return task.Is(TASK_TYPE_IMAGE, TASK_TYPE_WHITEBOARD)
+	return task.Is(TASK_TYPE_IMAGE)
 }
 
 func (task *Task) LoadResource() {
@@ -1110,27 +1004,7 @@ func (task *Task) ReceiveMessage(message string, data map[string]interface{}) {
 
 		if task.LineBase != nil {
 			task.LineBase.ReceiveMessage(MessageDoubleClick, nil)
-		} else if (!task.Is(TASK_TYPE_WHITEBOARD) || task.Whiteboard == nil || !task.Whiteboard.Editing) {
-
-			// We have to consume after double-clicking so you don't click outside of the new panel and exit it immediately
-			// or actuate a GUI element accidentally. HOWEVER, we want it here because double-clicking might not actually
-			// open the Task, as can be seen here
-			ConsumeMouseInput(rl.MouseLeftButton)
-
-			task.Open = true
-			task.Board.Project.TaskOpen = true
-			task.Dragging = false
-			task.Description.Focused = true
-
-			if task.Board.Project.TaskEditRect.Width != 0 && task.Board.Project.TaskEditRect.Height != 0 {
-				task.EditPanel.Rect = task.Board.Project.TaskEditRect
-			}
-
-			createAtLeastOneLineEnding()
-			task.Board.UndoBuffer.Capture(task)
-
 		}
-
 	} else if message == MessageTaskClose {
 
 		if task.Open {
@@ -1142,14 +1016,6 @@ func (task *Task) ReceiveMessage(message string, data map[string]interface{}) {
 			task.LoadResource()
 			task.Board.Project.PreviousTaskType = task.TaskType.ChoiceAsString()
 
-			if task.Is(TASK_TYPE_WHITEBOARD) {
-				if task.Whiteboard == nil {
-					task.Whiteboard = NewWhiteboard(task)
-				}
-				task.DisplaySize.X = float32(task.Whiteboard.Width * 2)
-				task.DisplaySize.Y = float32(task.Whiteboard.Height*2 + task.Board.Project.GridSize)
-				task.Whiteboard.Update()
-			}
 
 			if !task.Is(TASK_TYPE_LINE) {
 				for _, ending := range task.ValidLineEndings() {
@@ -1166,7 +1032,7 @@ func (task *Task) ReceiveMessage(message string, data map[string]interface{}) {
 
 		}
 	} else if message == MessageDragging {
-		if task.Selected && (task.Whiteboard == nil || !task.Whiteboard.Editing) {
+		if task.Selected {
 			if !task.Dragging {
 				task.Board.UndoBuffer.Capture(task) // Just started dragging
 			}
@@ -1215,9 +1081,6 @@ func (task *Task) ReceiveMessage(message string, data map[string]interface{}) {
 		}
 
 	} else if message == MessageThemeChange {
-		if task.Is(TASK_TYPE_WHITEBOARD) && task.Whiteboard != nil {
-			task.Whiteboard.Deserialize(task.Whiteboard.Serialize()) // De and re-serialize to change the colors
-		}
 	} else {
 		fmt.Println("UNKNOWN MESSAGE: ", message)
 	}
