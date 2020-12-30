@@ -18,7 +18,6 @@ import (
 
 // Build-time variable
 var releaseMode = "false"
-var demoMode = "" // If set to something other than "", it's a demo
 
 var camera = rl.NewCamera2D(rl.Vector2{480, 270}, rl.Vector2{}, 0, 1)
 var currentProject *Project
@@ -32,33 +31,6 @@ var font rl.Font
 var windowTitle = "MasterPlan v" + softwareVersion.String()
 var deltaTime = float32(0)
 var quit = false
-
-func init() {
-
-  /*
-	if releaseMode == "true" {
-
-		// Redirect STDERR and STDOUT to log.txt in release mode
-
-		logPath, err := xdg.DataFile("MasterPlan/log.txt")
-		if err != nil {
-			panic(err)
-		}
-		f, err := os.Create(logPath)
-		if err != nil {
-			panic(err)
-		}
-
-		os.Stderr = f
-		os.Stdout = f
-
-		log.SetOutput(f)
-
-	}
-
-	runtime.LockOSThread() // Don't know if this is necessary still
-  */
-}
 
 func main() {
 
@@ -111,10 +83,6 @@ func main() {
 
 	if programSettings.TransparentBackground {
 		windowFlags += rl.FlagWindowTransparent
-	}
-
-	if demoMode != "" {
-		demoMode = " " + demoMode
 	}
 
 	rl.SetConfigFlags(windowFlags)
@@ -341,7 +309,7 @@ func main() {
 
 		rl.EndDrawing()
 
-		title := "MasterPlan v" + softwareVersion.String() + demoMode
+		title := "MasterPlan v" + softwareVersion.String()
 
 		if currentProject.FilePath != "" {
 			_, fileName := filepath.Split(currentProject.FilePath)
@@ -398,5 +366,4 @@ func main() {
 	log.Println("MasterPlan exited successfully.")
 
 	currentProject.Destroy()
-
 }

@@ -31,7 +31,6 @@ const (
 	TASK_TYPE_NOTE
 	TASK_TYPE_IMAGE
 	TASK_TYPE_SOUND
-	TASK_TYPE_TIMER
 	TASK_TYPE_LINE
 	TASK_TYPE_MAP
 	TASK_TYPE_WHITEBOARD
@@ -246,12 +245,6 @@ func (task *Task) SetPanel() {
 		TASK_TYPE_NOTE)
 
 	row = column.Row()
-	row.Item(NewLabel("Name:"), TASK_TYPE_TIMER)
-
-	row = column.Row()
-	row.Item(task.TimerName, TASK_TYPE_TIMER)
-
-	row = column.Row()
 	row.Item(NewLabel("Filepath:"), TASK_TYPE_IMAGE, TASK_TYPE_SOUND)
 	row = column.Row()
 	row.Item(task.FilePathTextbox, TASK_TYPE_IMAGE, TASK_TYPE_SOUND)
@@ -277,12 +270,6 @@ func (task *Task) SetPanel() {
 	row.Item(task.DeadlineDaySpinner, TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION).Name = "deadline_sub"
 	row.Item(task.DeadlineMonthSpinner, TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION).Name = "deadline_sub"
 	row.Item(task.DeadlineYearSpinner, TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION).Name = "deadline_sub"
-
-	row = column.Row()
-	row.Item(NewLabel("Minutes:"), TASK_TYPE_TIMER)
-	row.Item(task.TimerMinuteSpinner, TASK_TYPE_TIMER)
-	row.Item(NewLabel("Seconds:"), TASK_TYPE_TIMER)
-	row.Item(task.TimerSecondSpinner, TASK_TYPE_TIMER)
 
 	row = column.Row()
 	row.Item(NewLabel("Bezier Lines:"), TASK_TYPE_LINE)
@@ -453,12 +440,6 @@ func (task *Task) Serialize() string {
 		jsonData, _ = sjson.Set(jsonData, `DeadlineDaySpinner\.Number`, task.DeadlineDaySpinner.Number())
 		jsonData, _ = sjson.Set(jsonData, `DeadlineMonthSpinner\.CurrentChoice`, task.DeadlineMonthSpinner.CurrentChoice)
 		jsonData, _ = sjson.Set(jsonData, `DeadlineYearSpinner\.Number`, task.DeadlineYearSpinner.Number())
-	}
-
-	if task.Is(TASK_TYPE_TIMER) {
-		jsonData, _ = sjson.Set(jsonData, `TimerSecondSpinner\.Number`, task.TimerSecondSpinner.Number())
-		jsonData, _ = sjson.Set(jsonData, `TimerMinuteSpinner\.Number`, task.TimerMinuteSpinner.Number())
-		jsonData, _ = sjson.Set(jsonData, `TimerName\.Text`, task.TimerName.Text())
 	}
 
 	jsonData, _ = sjson.Set(jsonData, `CreationTime`, task.CreationTime.Format(`Jan 2 2006 15:04:05`))
@@ -769,56 +750,6 @@ func (task *Task) Update() {
 		}
 	}
 
-	if task.Is(TASK_TYPE_TIMER) {
-
-		if task.TimerRunning {
-
-			countdownMax := float32(task.TimerSecondSpinner.Number() + (task.TimerMinuteSpinner.Number() * 60))
-
-			if countdownMax <= 0 {
-				task.TimerRunning = false
-			} else {
-
-				if task.TimerValue >= countdownMax {
-
-					task.TimerValue = countdownMax
-					task.TimerRunning = false
-					task.TimerValue = 0
-					task.Board.Project.Log("Timer [%s] elapsed.", task.TimerName.Text())
-
-					if task.Board.Project.SoundVolume.Number() > 0 {
-
-						audioFile, _ := task.Board.Project.LoadResource(GetPath("assets", "alarm.wav"))
-						stream, format, _ := audioFile.Audio()
-
-						fn := func() {
-							stream.Close()
-						}
-
-						volumed := &effects.Volume{
-							Streamer: stream,
-							Base:     2,
-							Volume:   float64(task.Board.Project.SoundVolume.Number()-10) / 2,
-						}
-
-						speaker.Play(beep.Seq(beep.Resample(1, format.SampleRate, beep.SampleRate(task.Board.Project.SampleRate.ChoiceAsInt()), volumed), beep.Callback(fn)))
-
-					}
-
-					if task.TaskBelow != nil && task.TaskBelow.Is(TASK_TYPE_TIMER) {
-						task.TaskBelow.ToggleTimer()
-					}
-
-				} else {
-					task.TimerValue += rl.GetFrameTime()
-				}
-
-			}
-
-		}
-
-	}
-
 	if task.Resizeable() && task.Selected && (!task.Is(TASK_TYPE_IMAGE) || task.Image.ID > 0) {
 		// Only valid images or other resizeable Task Types can be resized
 		task.ResizeRect = task.Rect
@@ -1030,12 +961,6 @@ func (task *Task) Draw() {
 			}
 			name = name[:cut]
 		}
-	case TASK_TYPE_TIMER:
-		minutes := int(task.TimerValue / 60)
-		seconds := int(task.TimerValue) % 60
-		timeString := fmt.Sprintf("%02d:%02d", minutes, seconds)
-		maxTimeString := fmt.Sprintf("%02d:%02d", task.TimerMinuteSpinner.Number(), task.TimerSecondSpinner.Number())
-		name = task.TimerName.Text() + " : " + timeString + " / " + maxTimeString
 	}
 
 	if len(task.SubTasks) > 0 && task.Completable() {
@@ -1125,7 +1050,7 @@ func (task *Task) Draw() {
 				taskDisplaySize.X += 16
 			}
 
-			if task.Is(TASK_TYPE_TIMER, TASK_TYPE_SOUND) {
+			if task.Is(TASK_TYPE_SOUND) {
 				taskDisplaySize.X += 32
 			}
 		}
@@ -1237,17 +1162,7 @@ func (task *Task) Draw() {
 		pos := task.SoundStream.Position()
 		len := task.SoundStream.Len()
 		perc = float32(pos) / float32(len)
-	} else if task.Is(TASK_TYPE_TIMER) {
-
-		countdownMax := float32(task.TimerSecondSpinner.Number() + (task.TimerMinuteSpinner.Number() * 60))
-
-		// If countdownMax == 0, then task.TimerValue / countdownMax can equal a NaN, which breaks drawing the
-		// filling rectangle.
-		if countdownMax > 0 {
-			perc = task.TimerValue / countdownMax
-		}
-
-	}
+  }
 
 	if perc > 1 {
 		perc = 1
@@ -1411,7 +1326,7 @@ func (task *Task) Draw() {
 		if task.Board.Project.ShowIcons.Checked {
 			textPos.X += 16
 		}
-		if task.Is(TASK_TYPE_TIMER, TASK_TYPE_SOUND) {
+		if task.Is(TASK_TYPE_SOUND) {
 			textPos.X += 32
 		}
 
@@ -1462,7 +1377,6 @@ func (task *Task) Draw() {
 			TASK_TYPE_NOTE:        {64, 0},
 			TASK_TYPE_SOUND:       {80, 0},
 			TASK_TYPE_IMAGE:       {96, 0},
-			TASK_TYPE_TIMER:       {0, 16},
 			TASK_TYPE_LINE:        {128, 32},
 			TASK_TYPE_MAP:         {0, 32},
 			TASK_TYPE_WHITEBOARD:  {64, 16},
@@ -1589,24 +1503,7 @@ func (task *Task) Draw() {
 
 	}
 
-	if task.Is(TASK_TYPE_TIMER) {
-
-		x := task.Rect.X + controlPos
-		y := task.Rect.Y
-
-		srcX := float32(16)
-		if task.TimerRunning {
-			srcX += 16
-		}
-
-		if task.SmallButton(srcX, 16, 16, 16, x, y) && (task.TimerMinuteSpinner.Number() > 0 || task.TimerSecondSpinner.Number() > 0) {
-			task.ToggleTimer()
-		}
-		if task.SmallButton(48, 16, 16, 16, x+16, y) {
-			task.TimerValue = 0
-			task.Board.Project.Log("Timer [%s] reset.", task.TimerName.Text())
-		}
-	} else if task.Is(TASK_TYPE_SOUND) {
+  if task.Is(TASK_TYPE_SOUND) {
 
 		x := task.Rect.X + controlPos
 		y := task.Rect.Y
@@ -1998,8 +1895,6 @@ func (task *Task) SetCompletion(complete bool) {
 
 	} else if task.Is(TASK_TYPE_SOUND) {
 		task.ToggleSound()
-	} else if task.Is(TASK_TYPE_TIMER) {
-		task.ToggleTimer()
 	} else if task.Is(TASK_TYPE_LINE) {
 		if task.LineBase != nil {
 			task.LineBase.Selected = true
@@ -2043,21 +1938,7 @@ func (task *Task) LoadResource() {
 						task.DisplaySize.X = float32(task.Image.Width)
 						task.DisplaySize.Y = float32(task.Image.Height)
 					}
-
-				} else if res.IsGIF() {
-
-					if task.GifAnimation != nil && task.PrevFilePath != task.FilePathTextbox.Text() {
-						task.DisplaySize.X = 0
-						task.DisplaySize.Y = 0
-					}
-					task.GifAnimation = NewGifAnimation(res.GIF())
-					if task.DisplaySize.X == 0 || task.DisplaySize.Y == 0 {
-						task.DisplaySize.X = float32(task.GifAnimation.Data.Image[0].Bounds().Size().X)
-						task.DisplaySize.Y = float32(task.GifAnimation.Data.Image[0].Bounds().Size().Y)
-					}
-
 				}
-
 			} else if task.Is(TASK_TYPE_SOUND) {
 
 				if task.SoundStream != nil {

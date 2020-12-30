@@ -89,7 +89,6 @@ type Project struct {
 
 	// Project Settings
 	TaskShadowSpinner           *Spinner
-	GridVisible                 *Checkbox
 	SampleRate                  *Spinner
 	SetSampleRate               int
 	SampleBuffer                int
@@ -149,7 +148,6 @@ type Project struct {
 	CameraPan           rl.Vector2
 	CameraOffset        rl.Vector2
 	FullyInitialized    bool
-	GridTexture         rl.Texture2D
 	ContextMenuOpen     bool
 	ContextMenuPosition rl.Vector2
 	ProjectSettingsOpen bool
@@ -213,7 +211,6 @@ func NewProject() *Project {
 		ColorThemeSpinner:           NewSpinner(0, 0, 256, 32),
 		TaskShadowSpinner:           NewSpinner(0, 0, 192, 32, "Off", "Flat", "Smooth", "3D"),
 		OutlineTasks:                NewCheckbox(0, 0, 32, 32),
-		GridVisible:                 NewCheckbox(0, 0, 32, 32),
 		ShowIcons:                   NewCheckbox(0, 0, 32, 32),
 		NumberingSequence:           NewSpinner(0, 0, 192, 32, "1.1.", "1-1)", "I.I.", "Bullets", "Squares", "Stars", "Off"),
 		NumberTopLevel:              NewCheckbox(0, 0, 32, 32),
@@ -298,10 +295,6 @@ func NewProject() *Project {
 	row = column.Row()
 	row.Item(NewLabel("Keep X backups max:"), SETTINGS_GENERAL)
 	row.Item(project.AutomaticBackupKeepCount, SETTINGS_GENERAL)
-
-	row = column.Row()
-	row.Item(NewLabel("Grid Visible:"), SETTINGS_GENERAL)
-	row.Item(project.GridVisible, SETTINGS_GENERAL)
 
 	row = column.Row()
 	row.Item(NewLabel("Lock Project:"), SETTINGS_GENERAL)
@@ -495,7 +488,6 @@ func NewProject() *Project {
 	project.LogOn = true
 	project.PulsingTaskSelection.Checked = true
 	project.TaskShadowSpinner.CurrentChoice = 2
-	project.GridVisible.Checked = true
 	project.ShowIcons.Checked = true
 	project.DoubleClickTimer = time.Time{}
 	project.PreviousTaskType = "Check Box"
@@ -581,10 +573,6 @@ func (project *Project) Save(backup bool) {
 		success = false
 		project.Log("Project cannot be manually saved, as it is locked.")
 
-	} else if demoMode != "" {
-
-		project.Log("Cannot save in MasterPlan demo mode.")
-
 	} else {
 
 		if project.FilePath != "" {
@@ -633,7 +621,6 @@ func (project *Project) Save(backup bool) {
 			data, _ = sjson.Set(data, `NumberTopLevel`, project.NumberTopLevel.Checked)
 			data, _ = sjson.Set(data, `NumberingSequence`, project.NumberingSequence.CurrentChoice)
 			data, _ = sjson.Set(data, `PulsingTaskSelection`, project.PulsingTaskSelection.Checked)
-			data, _ = sjson.Set(data, `GridVisible`, project.GridVisible.Checked)
 			data, _ = sjson.Set(data, `GridSize`, project.GridSize)
 			data, _ = sjson.Set(data, `SampleRate`, project.SampleRate.ChoiceAsInt())
 			data, _ = sjson.Set(data, `SampleBuffer`, project.SampleBuffer)
@@ -762,7 +749,6 @@ func LoadProject(filepath string) *Project {
 			project.TaskShadowSpinner.CurrentChoice = getInt(`TaskShadow`)
 			project.OutlineTasks.Checked = getBool(`OutlineTasks`)
 			project.BracketSubtasks.Checked = getBool(`BracketSubtasks`)
-			project.GridVisible.Checked = getBool(`GridVisible`)
 			project.ShowIcons.Checked = getBool(`ShowIcons`)
 			project.NumberingSequence.CurrentChoice = getInt(`NumberingSequence`)
 			project.NumberTopLevel.Checked = getBool(`NumberTopLevel`)
@@ -992,10 +978,6 @@ func (project *Project) Update() {
 
 	addToSelection := programSettings.Keybindings.On(KBAddToSelection)
 	removeFromSelection := programSettings.Keybindings.On(KBRemoveFromSelection)
-
-	src := rl.Rectangle{-100000, -100000, 200000, 200000}
-	dst := src
-	rl.DrawTexturePro(project.GridTexture, src, dst, rl.Vector2{}, 0, rl.White)
 
 	// Board name on background of project
 	boardName := project.CurrentBoard().Name
@@ -1740,7 +1722,6 @@ func (project *Project) ChangeTheme(themeName string) {
 		project.ColorThemeSpinner.CurrentChoice = 0 // Backup in case the named theme doesn't exist
 	}
 	currentTheme = project.ColorThemeSpinner.ChoiceAsString()
-	project.GenerateGrid()
 	project.SendMessage(MessageThemeChange, nil)
 }
 
@@ -2145,10 +2126,6 @@ func (project *Project) GUI() {
 				programSettings.Save()
 			}
 
-			if project.GridVisible.Changed {
-				project.GenerateGrid()
-			}
-
 			if project.ColorThemeSpinner.Changed {
 				project.ChangeTheme(project.ColorThemeSpinner.ChoiceAsString())
 			}
@@ -2343,8 +2320,7 @@ func (project *Project) SearchForTasks() {
 		searchText := strings.ToLower(project.Searchbar.Text())
 
 		if searchText != "" && (strings.Contains(strings.ToLower(task.Description.Text()), searchText) ||
-			(task.UsesMedia() && strings.Contains(strings.ToLower(task.FilePathTextbox.Text()), searchText)) ||
-			(task.Is(TASK_TYPE_TIMER) && strings.Contains(strings.ToLower(task.TimerName.Text()), searchText))) {
+			(task.UsesMedia() && strings.Contains(strings.ToLower(task.FilePathTextbox.Text()), searchText))) {
 			project.SearchedTasks = append(project.SearchedTasks, task)
 		}
 
@@ -2408,32 +2384,6 @@ func (project *Project) LockPositionToGrid(xy rl.Vector2) rl.Vector2 {
 
 }
 
-func (project *Project) GenerateGrid() {
-
-	data := []byte{}
-
-	for y := int32(0); y < project.GridSize*2; y++ {
-		for x := int32(0); x < project.GridSize*2; x++ {
-
-			c := rl.Color{}
-			if project.GridVisible.Checked && (x%project.GridSize == 0 || x%project.GridSize == project.GridSize-1) && (y%project.GridSize == 0 || y%project.GridSize == project.GridSize-1) {
-				c = getThemeColor(GUI_INSIDE)
-			}
-
-			data = append(data, c.R, c.G, c.B, c.A)
-		}
-	}
-
-	img := rl.NewImage(data, project.GridSize*2, project.GridSize*2, 1, rl.UncompressedR8g8b8a8)
-
-	if project.GridTexture.ID != 0 {
-		rl.UnloadTexture(project.GridTexture)
-	}
-
-	project.GridTexture = rl.LoadTextureFromImage(img)
-
-}
-
 func (project *Project) ReloadThemes() {
 
 	loadThemes()
@@ -2447,7 +2397,6 @@ func (project *Project) ReloadThemes() {
 		}
 	}
 
-	project.GenerateGrid()
 	guiThemes := []string{}
 	for theme, _ := range guiColors {
 		guiThemes = append(guiThemes, theme)

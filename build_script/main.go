@@ -8,7 +8,7 @@ import (
 	"github.com/otiai10/copy"
 )
 
-func build(baseDir string, ldFlags string) {
+func build(baseDir string, ldFlags string) bool {
 
 	fmt.Println(fmt.Sprintf("Beginning build to %s.", baseDir))
 
@@ -17,8 +17,6 @@ func build(baseDir string, ldFlags string) {
 			panic(err)
 		}
 	}
-
-	// Copy the assets folder to the bin directory
 
 	copyTo("assets", filepath.Join(baseDir, "assets"))
 
@@ -41,11 +39,19 @@ func build(baseDir string, ldFlags string) {
 	if err == nil {
 		fmt.Println("Build complete!")
 		fmt.Println("")
+
+    return true
 	}
+
+  return false
 }
 
 func main() {
-	build("bin", "-X main.releaseMode=true")
+	if build("bin", "-X main.releaseMode=true") {
+    // NOTE(justasd): console file handles aren't properly redirected to the parent terminal if we do
+    // this.
+    //exec.Command("bin/MasterPlan", "").CombinedOutput()
+  }
 }
 
 

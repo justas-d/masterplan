@@ -1,7 +1,6 @@
 package main
 
 import (
-	"image/gif"
 	"os"
 	"strings"
 	"time"
@@ -65,15 +64,6 @@ func (res *Resource) IsTexture() bool {
 
 func (res *Resource) Texture() rl.Texture2D {
 	return res.Data.(rl.Texture2D)
-}
-
-func (res *Resource) IsGIF() bool {
-	_, isGIF := res.Data.(*gif.GIF)
-	return isGIF
-}
-
-func (res *Resource) GIF() *gif.GIF {
-	return res.Data.(*gif.GIF)
 }
 
 func (res *Resource) IsAudio() bool {

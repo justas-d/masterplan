@@ -11,6 +11,7 @@ require (
 	github.com/faiface/beep v1.0.2
 	github.com/gabriel-vasile/mimetype v1.1.0
 	github.com/gen2brain/raylib-go v0.0.0-20200528082952-e0f56b22753f
+	github.com/gofrs/uuid v3.3.0+incompatible
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/goware/urlx v0.3.1
 	github.com/hako/durafmt v0.0.0-20191009132224-3f39dc1ed9f4
@@ -20,6 +21,7 @@ require (
 	github.com/otiai10/copy v1.2.0
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
+	github.com/satori/go.uuid v1.2.0
 	github.com/stretchr/testify v1.6.1 // indirect
 	github.com/tanema/gween v0.0.0-20200427131925-c89ae23cc63c
 	github.com/tidwall/gjson v1.6.0

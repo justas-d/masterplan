@@ -5,10 +5,13 @@ import (
 	"io/ioutil"
 	"sort"
 	"strings"
+  "os/exec"
+  "log"
+  "path/filepath"
 
-	"github.com/atotto/clipboard"
 	"github.com/gabriel-vasile/mimetype"
 	rl "github.com/gen2brain/raylib-go/raylib"
+	uuid "github.com/gofrs/uuid"
 )
 
 type Position struct {
@@ -390,40 +393,71 @@ func (board *Board) PasteTasks() {
 
 func (board *Board) PasteContent() {
 
-	clipboardData, _ := clipboard.ReadAll() // Tanks FPS if done every frame because of course it does
+  // TODO(justasd): :Portability
+  result, err := exec.Command("xclip", "-t", "TARGETS", "-o").CombinedOutput()
+  if err != nil {
+    log.Println("Failed to get targets from xclip")
+    log.Println(err)
+    return
+  }
 
-	if clipboardData != "" {
+  result_str := string(result[:])
+  targets := strings.Split(strings.Replace(result_str, "\r\n", "\n", -1), "\n")
 
-		board.Project.LogOn = false
-		res, _ := board.Project.LoadResource(clipboardData) // Attempt to load the resource
-		board.Project.LogOn = true
+  get_clipboard_data := func(target string) ([]byte, error) {
+    result, err := exec.Command("xclip", "-t", target, "-o").CombinedOutput()
+    if err != nil {
+      log.Println("Failed to get paste data from xclip")
+      log.Println(err)
+      return nil, err
+    }
 
-		task := board.CreateNewTask()
+    return result, nil
+  }
 
-		task.TaskType.CurrentChoice = TASK_TYPE_NOTE
+  //fmt.Println(targets)
 
-		if res != nil {
+  for _, target := range targets {
+    if strings.EqualFold(target, "STRING") {
+      task := board.CreateNewTask()
+      task.TaskType.CurrentChoice = TASK_TYPE_NOTE
 
-			task.FilePathTextbox.SetText(clipboardData)
+      result, err := get_clipboard_data(target)
+      if err != nil { return }
 
-			if res.IsTexture() || res.IsGIF() {
-				task.TaskType.CurrentChoice = TASK_TYPE_IMAGE
-			} else if res.IsAudio() {
-				task.TaskType.CurrentChoice = TASK_TYPE_SOUND
-			}
+      str := string(result[:])
+			task.Description.SetText(str)
 
-			task.LoadResource()
+      break
+    }
 
-		} else {
-			task.Description.SetText(clipboardData)
-		}
+    if strings.Contains(target, "image") {
 
-		board.Project.Log("Pasted 1 new %s Task from clipboard content.", task.TaskType.ChoiceAsString())
+      img_data , err := get_clipboard_data(target)
+      if err != nil { return }
 
-	} else {
-		board.Project.Log("Unable to create Task from clipboard content.")
-	}
 
+      id := uuid.Must(uuid.NewV4()).String()
+      dir := filepath.Dir(board.Project.FilePath)
+
+      // NOTE(justasd): Extension is a @HACK
+      save_path := filepath.Join(dir, id) + ".png"
+      err = ioutil.WriteFile(save_path, img_data, 0644)
+      if err != nil {
+        fmt.Printf("Failed to save image file to '%s'", save_path)
+        return
+      }
+
+      fmt.Printf("Saved image to '%s'", save_path)
+
+      task := board.CreateNewTask()
+      task.TaskType.CurrentChoice = TASK_TYPE_IMAGE
+      task.FilePathTextbox.SetText(save_path)
+      task.LoadResource()
+
+      break
+    }
+  }
 }
 
 func (board *Board) ReorderTasks() {
