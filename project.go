@@ -1252,8 +1252,6 @@ func (project *Project) Shortcuts() {
 			if !project.Searchbar.Focused {
 
 				panSpeed := float32(16 / camera.Zoom)
-				selectedTasks := project.CurrentBoard().SelectedTasks(false)
-				gs := float32(project.GridSize)
 
 				if keybindings.On(KBFasterPan) {
 					panSpeed *= 3
@@ -1350,151 +1348,6 @@ func (project *Project) Shortcuts() {
 					project.CurrentBoard().DeleteSelectedTasks()
 				} else if keybindings.On(KBFocusOnTasks) {
 					project.CurrentBoard().FocusViewOnSelectedTasks()
-				} else if len(selectedTasks) > 0 && (keybindings.On(KBSelectTaskAbove) ||
-					keybindings.On(KBSelectTaskRight) ||
-					keybindings.On(KBSelectTaskLeft) ||
-					keybindings.On(KBSelectTaskBelow)) {
-
-					// Selecting + sliding
-
-					up := keybindings.On(KBSelectTaskAbove)
-					right := keybindings.On(KBSelectTaskRight)
-					down := keybindings.On(KBSelectTaskBelow)
-					left := keybindings.On(KBSelectTaskLeft)
-
-					if keybindings.On(KBSlideTask) {
-
-						// Shift Tasks / Slide Tasks
-
-						dx := float32(0)
-						dy := float32(0)
-
-						if right {
-							dx = 1
-						} else if left {
-							dx = -1
-						} else if up {
-							dy = -1
-						} else if down {
-							dy = 1
-						}
-
-						size := func(task *Task) float32 {
-							if dx != 0 {
-								return task.Rect.Width
-							}
-							return task.Rect.Height
-						}
-
-						board := project.CurrentBoard()
-
-						// Selected Tasks that are to be moved should be "intangible", since they're moving to somewhere else, and might
-						// be swapping positions with a neighbor.
-						for _, task := range selectedTasks {
-							board.RemoveTaskFromGrid(task)
-						}
-
-						for _, task := range selectedTasks {
-
-							neighbor := task.NeighborInDirection(dx, dy)
-
-							// This could loop indefinitely, so we do this instead of a standard while / for loop
-							for i := 0; i < 1000; i++ {
-								if neighbor == nil || !neighbor.Selected {
-									break
-								}
-								neighbor = neighbor.NeighborInDirection(dx, dy)
-
-							}
-
-							if neighbor != nil {
-								neighbor.Move(-dx*size(task), -dy*size(task))
-								task.Position.X += dx * size(neighbor)
-								task.Position.Y += dy * size(neighbor)
-							} else {
-								task.Position.X += dx * gs
-								task.Position.Y += dy * gs
-							}
-
-						}
-
-						board.FocusViewOnSelectedTasks()
-
-						board.ReorderTasks()
-
-					} else {
-
-						var selected *Task
-						if down || right || left {
-							selected = selectedTasks[len(selectedTasks)-1]
-						} else {
-							selected = selectedTasks[0]
-						}
-
-						if selected != nil {
-
-							others := []*Task{}
-
-							// Selection by keypress prioritizes neighbors first and foremost
-
-							if right && selected.TaskRight != nil {
-
-								others = []*Task{selected.TaskRight}
-
-							} else if left && selected.TaskLeft != nil {
-
-								others = []*Task{selected.TaskLeft}
-
-							} else if up && selected.TaskAbove != nil {
-
-								others = []*Task{selected.TaskAbove}
-
-							} else if down && selected.TaskBelow != nil {
-
-								others = []*Task{selected.TaskBelow}
-
-							} else {
-
-								for _, t := range selected.Board.Tasks {
-									if right && t.Position.X > selected.Position.X {
-										others = append(others, t)
-									} else if down && t.Position.Y > selected.Position.Y {
-										others = append(others, t)
-									} else if left && t.Position.X < selected.Position.X {
-										others = append(others, t)
-									} else if up && t.Position.Y < selected.Position.Y {
-										others = append(others, t)
-									}
-								}
-
-								sort.Slice(others, func(i, j int) bool {
-									return rl.Vector2Distance(others[i].Position, selected.Position) <
-										rl.Vector2Distance(others[j].Position, selected.Position)
-								})
-
-							}
-
-							var neighbor *Task
-							if len(others) > 0 {
-								neighbor = others[0]
-							}
-
-							if neighbor != nil {
-
-								if keybindings.On(KBAddToSelection) {
-									neighbor.ReceiveMessage(MessageSelect, map[string]interface{}{"task": neighbor})
-								} else {
-									project.SendMessage(MessageSelect, map[string]interface{}{"task": neighbor})
-								}
-
-							}
-
-							project.CurrentBoard().FocusViewOnSelectedTasks()
-
-						}
-
-					}
-
 				} else if keybindings.On(KBEditTasks) {
 					for _, task := range project.CurrentBoard().SelectedTasks(true) {
 						task.ReceiveMessage(MessageDoubleClick, nil)
@@ -1518,34 +1371,7 @@ func (project *Project) Shortcuts() {
 					}
 				} else if keybindings.On(KBDeselectTasks) {
 					project.SendMessage(MessageSelect, nil)
-				} else if keybindings.On(KBSelectTopTaskInStack) {
-					for _, task := range project.CurrentBoard().SelectedTasks(true) {
-						next := task.TaskAbove
-						for next != nil && next.TaskAbove != nil {
-							next = next.TaskAbove
-						}
-						if next != nil {
-							project.SendMessage(MessageSelect, map[string]interface{}{"task": next})
-						}
-						break
-					}
-					project.CurrentBoard().FocusViewOnSelectedTasks()
-				} else if keybindings.On(KBSelectBottomTaskInStack) {
-					for _, task := range project.CurrentBoard().Tasks {
-						if task.Selected {
-							next := task.TaskBelow
-							for next != nil && next.TaskBelow != nil {
-								next = next.TaskBelow
-							}
-							if next != nil {
-								project.SendMessage(MessageSelect, map[string]interface{}{"task": next})
-							}
-							break
-						}
-					}
-					project.CurrentBoard().FocusViewOnSelectedTasks()
 				}
-
 			}
 
 			if project.Searchbar.Focused && rl.IsKeyPressed(rl.KeyEnter) {

@@ -66,14 +66,7 @@ type Task struct {
 	LineEndings []*Task
 	LineBase    *Task
 	LineBezier  *Checkbox
-	// ArrowPointingToTask *Task
 
-	TaskAbove     *Task
-	TaskBelow     *Task
-	TaskRight     *Task
-	TaskLeft      *Task
-	TaskUnder     *Task
-	RestOfStack   []*Task
 	GridPositions []Position
 	Valid         bool
 
@@ -683,26 +676,6 @@ func (task *Task) Draw() {
 		color.A = 32 + alpha
 	}
 
-	//if task.Board.Project.DeadlineAnimation.CurrentChoice < 4 {
-	//	if task.Due() == TASK_DUE_TODAY {
-	//		src := rl.Rectangle{208 + rl.GetTime()*30, 0, task.Rect.Width, task.Rect.Height}
-	//		dst := task.Rect
-	//		rl.DrawTexturePro(task.Board.Project.Patterns, src, dst, rl.Vector2{}, 0, getThemeColor(GUI_INSIDE_HIGHLIGHTED))
-	//	} else if task.Due() == TASK_DUE_LATE {
-	//		src := rl.Rectangle{208 + rl.GetTime()*120, 16, task.Rect.Width, task.Rect.Height}
-	//		dst := task.Rect
-	//		rl.DrawTexturePro(task.Board.Project.Patterns, src, dst, rl.Vector2{}, 0, getThemeColor(GUI_INSIDE_HIGHLIGHTED))
-	//	}
-	//}
-
-	if task.PercentageComplete != 0 {
-		rect := task.Rect
-		rect.Width *= task.PercentageComplete
-		rectColor := getThemeColor(GUI_INSIDE_HIGHLIGHTED)
-		rectColor.A = alpha
-		//rl.DrawRectangleRec(rect, rectColor)
-	}
-
 	if task.Is(TASK_TYPE_IMAGE) {
 
 		if task.Image.ID != 0 {
@@ -717,9 +690,7 @@ func (task *Task) Draw() {
 				color.A = alpha
 			}
 			rl.DrawTexturePro(task.Image, src, dst, rl.Vector2{}, 0, color)
-
 		}
-
 	}
 
 	if task.Resizeable() && task.Selected && (!task.Is(TASK_TYPE_IMAGE) || task.Image.ID > 0) {
@@ -805,23 +776,6 @@ func (task *Task) Draw() {
 			iconSrc.X = 144
 			iconSrc.Y = 32
 			rotation = rl.Vector2Angle(task.LineBase.Position, task.Position)
-
-			if task.TaskRight != nil && task.TaskRight != task.LineBase {
-				rotation = 0
-			} else if task.TaskLeft != nil && task.TaskLeft != task.LineBase {
-				rotation = 180
-			} else if task.TaskAbove != nil && task.TaskAbove != task.LineBase {
-				rotation = -90
-			} else if task.TaskBelow != nil && task.TaskBelow != task.LineBase {
-				rotation = 90
-			}
-
-			if task.TaskUnder != nil {
-				// Line endings that are inside Task Rectangles become "X"
-				iconSrc.X = 160
-				rotation = 0
-			}
-
 		}
 
 		if !task.Is(TASK_TYPE_IMAGE) || invalidImage {
@@ -1004,7 +958,25 @@ func (task *Task) ReceiveMessage(message string, data map[string]interface{}) {
 
 		if task.LineBase != nil {
 			task.LineBase.ReceiveMessage(MessageDoubleClick, nil)
-		}
+    } else {
+
+      // We have to consume after double-clicking so you don't click outside of the new panel and exit it immediately
+      // or actuate a GUI element accidentally. HOWEVER, we want it here because double-clicking might not actually
+      // open the Task, as can be seen here
+      ConsumeMouseInput(rl.MouseLeftButton)
+
+      task.Open = true
+      task.Board.Project.TaskOpen = true
+      task.Dragging = false
+      task.Description.Focused = true
+
+      if task.Board.Project.TaskEditRect.Width != 0 && task.Board.Project.TaskEditRect.Height != 0 {
+        task.EditPanel.Rect = task.Board.Project.TaskEditRect
+      }
+
+      createAtLeastOneLineEnding()
+      task.Board.UndoBuffer.Capture(task)
+    }
 	} else if message == MessageTaskClose {
 
 		if task.Open {
@@ -1176,19 +1148,6 @@ func (task *Task) CreateLineEnding() *Task {
 	}
 	return nil
 
-}
-
-func (task *Task) NeighborInDirection(dirX, dirY float32) *Task {
-	if dirX > 0 {
-		return task.TaskRight
-	} else if dirX < 0 {
-		return task.TaskLeft
-	} else if dirY < 0 {
-		return task.TaskAbove
-	} else if dirY > 0 {
-		return task.TaskBelow
-	}
-	return nil
 }
 
 func (task *Task) SmallButton(srcX, srcY, srcW, srcH, dstX, dstY float32) bool {

@@ -105,32 +105,10 @@ func (board *Board) RestoreTask(task *Task) {
 
 func (board *Board) DeleteSelectedTasks() {
 
-	count := 0
-
 	selected := board.SelectedTasks(false)
 
-	stackMoveUp := []*Task{}
-
 	for _, t := range selected {
-		count++
-		for _, rest := range t.RestOfStack {
-			if !rest.Selected {
-				stackMoveUp = append(stackMoveUp, rest)
-			}
-		}
 		board.DeleteTask(t)
-	}
-
-	for _, s := range stackMoveUp {
-		board.UndoBuffer.Capture(s)
-	}
-
-	for _, s := range stackMoveUp {
-		s.Position.Y -= float32(board.Project.GridSize)
-	}
-
-	for _, s := range stackMoveUp {
-		board.UndoBuffer.Capture(s)
 	}
 
 	board.ReorderTasks()
