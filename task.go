@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -15,32 +14,14 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
-	"github.com/chonla/roman-number-go"
-
-	"github.com/hako/durafmt"
-
-	"github.com/faiface/beep"
-	"github.com/faiface/beep/effects"
-	"github.com/faiface/beep/speaker"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 const (
-	TASK_TYPE_BOOLEAN = iota
-	TASK_TYPE_PROGRESSION
-	TASK_TYPE_NOTE
+	TASK_TYPE_NOTE = iota
 	TASK_TYPE_IMAGE
-	TASK_TYPE_SOUND
 	TASK_TYPE_LINE
-	TASK_TYPE_MAP
 	TASK_TYPE_WHITEBOARD
-)
-
-const (
-	TASK_NOT_DUE = iota
-	TASK_DUE_FUTURE
-	TASK_DUE_TODAY
-	TASK_DUE_LATE
 )
 
 type URLButton struct {
@@ -63,30 +44,9 @@ type Task struct {
 	Description *Textbox
 
 	CreationTime   time.Time
-	CompletionTime time.Time
 
-	DeadlineCheckbox     *Checkbox
-	DeadlineDaySpinner   *NumberSpinner
-	DeadlineMonthSpinner *Spinner
-	DeadlineYearSpinner  *NumberSpinner
-
-	TimerSecondSpinner *NumberSpinner
-	TimerMinuteSpinner *NumberSpinner
-	TimerValue         float32
-	TimerRunning       bool
-	TimerName          *Textbox
-
-	CompletionCheckbox           *Checkbox
-	CompletionProgressionCurrent *NumberSpinner
-	CompletionProgressionMax     *NumberSpinner
 	Image                        rl.Texture2D
 
-	GifAnimation *GifAnimation
-
-	SoundControl       *beep.Ctrl
-	SoundVolume        *effects.Volume
-	SoundStream        beep.StreamSeekCloser
-	SoundComplete      bool
 	FilePathTextbox    *Textbox
 	PrevFilePath       string
 	DisplaySize        rl.Vector2
@@ -115,12 +75,10 @@ type Task struct {
 	TaskLeft      *Task
 	TaskUnder     *Task
 	RestOfStack   []*Task
-	SubTasks      []*Task
 	GridPositions []Position
 	Valid         bool
 
 	EditPanel                      *Panel
-	CompletionTimeLabel            *Label
 	LoadMediaButton                *Button
 	ClearMediaButton               *Button
 	CreationLabel                  *Label
@@ -128,69 +86,32 @@ type Task struct {
 	URLButtons                     []URLButton
 	SuccessfullyLoadedResourceOnce bool
 
-	MapImage   *MapImage
 	Whiteboard *Whiteboard
 }
 
 func NewTask(board *Board) *Task {
-
-	months := []string{
-		"January",
-		"February",
-		"March",
-		"April",
-		"May",
-		"June",
-		"July",
-		"August",
-		"September",
-		"October",
-		"November",
-		"December",
-	}
 
 	postX := float32(180)
 
 	task := &Task{
 		Rect:                         rl.Rectangle{0, 0, 16, 16},
 		Board:                        board,
-		TaskType:                     NewButtonGroup(0, 32, 500, 32, 2, "Check Box", "Progression", "Note", "Image", "Sound", "Timer", "Line", "Map", "Whiteboard"),
+		TaskType:                     NewButtonGroup(0, 32, 500, 32, 2, "Note", "Image", "Line", "Whiteboard"),
 		Description:                  NewTextbox(postX, 64, 512, 32),
-		TimerName:                    NewTextbox(postX, 64, 256, 16),
-		CompletionCheckbox:           NewCheckbox(postX, 96, 32, 32),
-		CompletionProgressionCurrent: NewNumberSpinner(postX, 96, 128, 40),
-		CompletionProgressionMax:     NewNumberSpinner(postX+80, 96, 128, 40),
 		NumberingPrefix:              []int{-1},
 		ID:                           board.Project.FirstFreeID(),
 		FilePathTextbox:              NewTextbox(postX, 64, 512, 16),
-		DeadlineCheckbox:             NewCheckbox(postX, 112, 32, 32),
-		DeadlineMonthSpinner:         NewSpinner(postX+40, 128, 200, 40, months...),
-		DeadlineDaySpinner:           NewNumberSpinner(postX+100, 80, 160, 40),
-		DeadlineYearSpinner:          NewNumberSpinner(postX+240, 128, 160, 40),
-		TimerMinuteSpinner:           NewNumberSpinner(postX, 0, 160, 40),
-		TimerSecondSpinner:           NewNumberSpinner(postX, 0, 160, 40),
 		LineEndings:                  []*Task{},
 		LineBezier:                   NewCheckbox(postX, 64, 32, 32),
 		GridPositions:                []Position{},
 		Valid:                        true,
 		LoadMediaButton:              NewButton(0, 0, 128, 32, "Load", false),
-		CompletionTimeLabel:          NewLabel("Completion time"),
 		CreationLabel:                NewLabel("Creation time"),
 	}
 
 	task.SetPanel()
 
-	task.DeadlineMonthSpinner.ExpandUpwards = true
-	task.DeadlineMonthSpinner.ExpandMaxRowCount = 5
-
 	task.CreationTime = time.Now()
-	task.CompletionProgressionCurrent.Textbox.MaxCharactersPerLine = 19
-	task.CompletionProgressionCurrent.Textbox.AllowNewlines = false
-	task.CompletionProgressionCurrent.Minimum = 0
-
-	task.CompletionProgressionMax.Textbox.MaxCharactersPerLine = 19
-	task.CompletionProgressionMax.Textbox.AllowNewlines = false
-	task.CompletionProgressionMax.Minimum = 0
 
 	task.MinSize = rl.Vector2{task.Rect.Width, task.Rect.Height}
 	task.MaxSize = rl.Vector2{0, 0}
@@ -198,22 +119,6 @@ func NewTask(board *Board) *Task {
 	task.FilePathTextbox.AllowNewlines = false
 
 	task.FilePathTextbox.VerticalAlignment = ALIGN_CENTER
-
-	task.DeadlineDaySpinner.Minimum = 1
-	task.DeadlineDaySpinner.Maximum = 31
-	task.DeadlineDaySpinner.Loop = true
-	task.DeadlineDaySpinner.Rect.X = task.DeadlineMonthSpinner.Rect.X + task.DeadlineMonthSpinner.Rect.Width + 8
-	task.DeadlineYearSpinner.Rect.X = task.DeadlineDaySpinner.Rect.X + task.DeadlineDaySpinner.Rect.Width + 8
-
-	task.TimerSecondSpinner.Minimum = 0
-	task.TimerSecondSpinner.Maximum = 59
-	task.TimerMinuteSpinner.Minimum = 0
-
-	task.SoundVolume = &effects.Volume{
-		Base: 2,
-	}
-
-	task.UpdateSoundVolume()
 
 	return task
 }
@@ -236,56 +141,20 @@ func (task *Task) SetPanel() {
 	row.Item(task.CreationLabel)
 
 	column.Row().Item(NewLabel("Description:"),
-		TASK_TYPE_BOOLEAN,
-		TASK_TYPE_PROGRESSION,
 		TASK_TYPE_NOTE)
 	column.Row().Item(task.Description,
-		TASK_TYPE_BOOLEAN,
-		TASK_TYPE_PROGRESSION,
 		TASK_TYPE_NOTE)
 
 	row = column.Row()
-	row.Item(NewLabel("Filepath:"), TASK_TYPE_IMAGE, TASK_TYPE_SOUND)
+	row.Item(NewLabel("Filepath:"), TASK_TYPE_IMAGE)
 	row = column.Row()
-	row.Item(task.FilePathTextbox, TASK_TYPE_IMAGE, TASK_TYPE_SOUND)
+	row.Item(task.FilePathTextbox, TASK_TYPE_IMAGE)
 	row = column.Row()
-	row.Item(task.LoadMediaButton, TASK_TYPE_IMAGE, TASK_TYPE_SOUND)
-
-	row = column.Row()
-	row.Item(NewLabel("Completed:"), TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION)
-	row.Item(task.CompletionCheckbox, TASK_TYPE_BOOLEAN)
-	row.Item(task.CompletionProgressionCurrent, TASK_TYPE_PROGRESSION)
-	row.Item(NewLabel("out of"), TASK_TYPE_PROGRESSION)
-	row.Item(task.CompletionProgressionMax, TASK_TYPE_PROGRESSION)
-
-	row = column.Row()
-	row.Item(NewLabel("Completion Date:"), TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION)
-	row.Item(task.CompletionTimeLabel, TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION)
-
-	row = column.Row()
-	row.Item(NewLabel("Deadline:"), TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION)
-	row.Item(task.DeadlineCheckbox, TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION).Name = "deadline_on"
-
-	row = column.Row()
-	row.Item(task.DeadlineDaySpinner, TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION).Name = "deadline_sub"
-	row.Item(task.DeadlineMonthSpinner, TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION).Name = "deadline_sub"
-	row.Item(task.DeadlineYearSpinner, TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION).Name = "deadline_sub"
+	row.Item(task.LoadMediaButton, TASK_TYPE_IMAGE)
 
 	row = column.Row()
 	row.Item(NewLabel("Bezier Lines:"), TASK_TYPE_LINE)
 	row.Item(task.LineBezier, TASK_TYPE_LINE)
-
-	row = column.Row()
-	row.Item(NewButton(0, 0, 128, 32, "Shift Up", false), TASK_TYPE_MAP, TASK_TYPE_WHITEBOARD).Name = "shift up"
-	row = column.Row()
-	row.Item(NewButton(0, 0, 128, 32, "Shift Left", false), TASK_TYPE_MAP, TASK_TYPE_WHITEBOARD).Name = "shift left"
-	row.Item(NewButton(0, 0, 128, 32, "Shift Right", false), TASK_TYPE_MAP, TASK_TYPE_WHITEBOARD).Name = "shift right"
-	row = column.Row()
-	row.Item(NewButton(0, 0, 128, 32, "Shift Down", false), TASK_TYPE_MAP, TASK_TYPE_WHITEBOARD).Name = "shift down"
-
-	row = column.Row()
-	row.Item(NewButton(0, 0, 128, 32, "Clear", false), TASK_TYPE_MAP, TASK_TYPE_WHITEBOARD).Name = "clear"
-	row.Item(NewButton(0, 0, 128, 32, "Invert", false), TASK_TYPE_WHITEBOARD).Name = "invert"
 
 	for _, row := range column.Rows {
 		row.VerticalSpacing = 16
@@ -302,31 +171,8 @@ func (task *Task) Clone() *Task {
 	tt := *copyData.TaskType
 	copyData.TaskType = &tt
 
-	cc := *copyData.CompletionCheckbox
-	copyData.CompletionCheckbox = &cc
-
-	// We have to make explicit clones of some elements, though, as they have references otherwise
-	copyData.CompletionProgressionCurrent = task.CompletionProgressionCurrent.Clone()
-	copyData.CompletionProgressionMax = task.CompletionProgressionMax.Clone()
-
 	cPath := *copyData.FilePathTextbox
 	copyData.FilePathTextbox = &cPath
-
-	copyData.TimerMinuteSpinner = task.TimerMinuteSpinner.Clone()
-	copyData.TimerSecondSpinner = task.TimerSecondSpinner.Clone()
-
-	timerName := *copyData.TimerName
-	copyData.TimerName = &timerName
-
-	dlc := *copyData.DeadlineCheckbox
-	copyData.DeadlineCheckbox = &dlc
-
-	copyData.DeadlineDaySpinner = task.DeadlineDaySpinner.Clone()
-
-	dms := *copyData.DeadlineMonthSpinner
-	copyData.DeadlineMonthSpinner = &dms
-
-	copyData.DeadlineYearSpinner = task.DeadlineYearSpinner.Clone()
 
 	bl := *copyData.LineBezier
 	copyData.LineBezier = &bl
@@ -352,31 +198,13 @@ func (task *Task) Clone() *Task {
 		ending.Selected = true
 	}
 
-	copyData.TimerRunning = false // We don't want to clone the timer running
-	copyData.TimerValue = 0
 	copyData.PrevFilePath = ""
-	copyData.GifAnimation = nil
-	copyData.SoundControl = nil
-	copyData.SoundStream = nil
-
-	if copyData.SoundVolume != nil {
-		speaker.Lock()
-		ov := *copyData.SoundVolume
-		copyData.SoundVolume = &ov
-		copyData.SoundVolume.Streamer = nil
-		speaker.Unlock()
-	}
 
 	copyData.ID = copyData.Board.Project.FirstFreeID()
 
 	copyData.ReceiveMessage(MessageTaskClose, nil) // We do this to recreate the resources for the Task, if necessary.
 
 	copyData.SetPanel()
-
-	if task.MapImage != nil {
-		copyData.MapImage = NewMapImage(&copyData)
-		copyData.MapImage.Copy(task.MapImage)
-	}
 
 	if task.Whiteboard != nil {
 		copyData.Whiteboard = NewWhiteboard(&copyData)
@@ -400,9 +228,6 @@ func (task *Task) Serialize() string {
 		jsonData, _ = sjson.Set(jsonData, `ImageDisplaySize\.Y`, task.DisplaySize.Y)
 	}
 
-	jsonData, _ = sjson.Set(jsonData, `Checkbox\.Checked`, task.CompletionCheckbox.Checked)
-	jsonData, _ = sjson.Set(jsonData, `Progression\.Current`, task.CompletionProgressionCurrent.Number())
-	jsonData, _ = sjson.Set(jsonData, `Progression\.Max`, task.CompletionProgressionMax.Number())
 	jsonData, _ = sjson.Set(jsonData, `Description`, task.Description.Text())
 
 	if task.UsesMedia() && task.FilePathTextbox.Text() != "" {
@@ -430,23 +255,24 @@ func (task *Task) Serialize() string {
 	}
 
 	jsonData, _ = sjson.Set(jsonData, `Selected`, task.Selected)
-	jsonData, _ = sjson.Set(jsonData, `TaskType\.CurrentChoice`, task.TaskType.CurrentChoice)
 
-	if task.Board.Project.SaveSoundsPlaying.Checked {
-		jsonData, _ = sjson.Set(jsonData, `SoundPaused`, task.SoundControl != nil && task.SoundControl.Paused)
-	}
+  {
+    jtype := "unknown"
 
-	if task.DeadlineCheckbox.Checked {
-		jsonData, _ = sjson.Set(jsonData, `DeadlineDaySpinner\.Number`, task.DeadlineDaySpinner.Number())
-		jsonData, _ = sjson.Set(jsonData, `DeadlineMonthSpinner\.CurrentChoice`, task.DeadlineMonthSpinner.CurrentChoice)
-		jsonData, _ = sjson.Set(jsonData, `DeadlineYearSpinner\.Number`, task.DeadlineYearSpinner.Number())
-	}
+    if task.TaskType.CurrentChoice == TASK_TYPE_IMAGE {
+      jtype = "image"
+    } else if task.TaskType.CurrentChoice == TASK_TYPE_LINE {
+      jtype = "line"
+    } else if task.TaskType.CurrentChoice == TASK_TYPE_WHITEBOARD {
+      jtype = "whiteboard"
+    } else if task.TaskType.CurrentChoice == TASK_TYPE_NOTE {
+      jtype = "note"
+    }
+
+    jsonData, _ = sjson.Set(jsonData, `TaskType\.CurrentChoice`, jtype)
+  }
 
 	jsonData, _ = sjson.Set(jsonData, `CreationTime`, task.CreationTime.Format(`Jan 2 2006 15:04:05`))
-
-	if !task.CompletionTime.IsZero() {
-		jsonData, _ = sjson.Set(jsonData, `CompletionTime`, task.CompletionTime.Format(`Jan 2 2006 15:04:05`))
-	}
 
 	if task.Is(TASK_TYPE_LINE) {
 
@@ -467,17 +293,6 @@ func (task *Task) Serialize() string {
 
 		}
 
-	}
-
-	if task.Is(TASK_TYPE_MAP) && task.MapImage != nil {
-		data := [][]int32{}
-		for y := 0; y < int(task.MapImage.cellHeight); y++ {
-			data = append(data, []int32{})
-			for x := 0; x < int(task.MapImage.cellWidth); x++ {
-				data[y] = append(data[y], task.MapImage.Data[y][x])
-			}
-		}
-		jsonData, _ = sjson.Set(jsonData, `MapData`, data)
 	}
 
 	if task.Is(TASK_TYPE_WHITEBOARD) && task.Whiteboard != nil {
@@ -506,9 +321,9 @@ func (task *Task) Deserialize(jsonData string) {
 		return float32(gjson.Get(jsonData, name).Float())
 	}
 
-	getInt := func(name string) int {
-		return int(gjson.Get(jsonData, name).Int())
-	}
+//	getInt := func(name string) int {
+//		return int(gjson.Get(jsonData, name).Int())
+//	}
 
 	getBool := func(name string) bool {
 		return gjson.Get(jsonData, name).Bool()
@@ -533,9 +348,6 @@ func (task *Task) Deserialize(jsonData string) {
 		task.DisplaySize.Y = getFloat(`ImageDisplaySize\.Y`)
 	}
 
-	task.CompletionCheckbox.Checked = getBool(`Checkbox\.Checked`)
-	task.CompletionProgressionCurrent.SetNumber(getInt(`Progression\.Current`))
-	task.CompletionProgressionMax.SetNumber(getInt(`Progression\.Max`))
 	task.Description.SetText(getString(`Description`))
 
 	if f := gjson.Get(jsonData, `FilePath`); f.Exists() {
@@ -560,33 +372,24 @@ func (task *Task) Deserialize(jsonData string) {
 	}
 
 	task.Selected = getBool(`Selected`)
-	task.TaskType.CurrentChoice = getInt(`TaskType\.CurrentChoice`)
 
-	if hasData(`DeadlineDaySpinner\.Number`) {
-		task.DeadlineCheckbox.Checked = true
-		task.DeadlineDaySpinner.SetNumber(getInt(`DeadlineDaySpinner\.Number`))
-		task.DeadlineMonthSpinner.CurrentChoice = getInt(`DeadlineMonthSpinner\.CurrentChoice`)
-		task.DeadlineYearSpinner.SetNumber(getInt(`DeadlineYearSpinner\.Number`))
-	}
+  {
+    jtype := getString(`TaskType\.CurrentChoice`)
 
-	if hasData(`TimerSecondSpinner\.Number`) {
-		task.TimerSecondSpinner.SetNumber(getInt(`TimerSecondSpinner\.Number`))
-		task.TimerMinuteSpinner.SetNumber(getInt(`TimerMinuteSpinner\.Number`))
-		task.TimerName.SetText(getString(`TimerName\.Text`))
-	}
+    if jtype == "image" {
+      task.TaskType.CurrentChoice = TASK_TYPE_IMAGE
+    } else if jtype == "line" {
+      task.TaskType.CurrentChoice = TASK_TYPE_LINE
+    } else if jtype == "whiteboard" {
+      task.TaskType.CurrentChoice = TASK_TYPE_WHITEBOARD
+    } else if jtype == "note" {
+      task.TaskType.CurrentChoice = TASK_TYPE_NOTE
+    }
+  }
 
 	creationTime, err := time.Parse(`Jan 2 2006 15:04:05`, getString(`CreationTime`))
 	if err == nil {
 		task.CreationTime = creationTime
-	}
-
-	if hasData(`CompletionTime`) {
-		// Wouldn't be strange to not have a completion for incomplete Tasks.
-		ctString := getString(`CompletionTime`)
-		completionTime, err := time.Parse(`Jan 2 2006 15:04:05`, ctString)
-		if err == nil {
-			task.CompletionTime = completionTime
-		}
 	}
 
 	if hasData(`BezierLines`) {
@@ -603,23 +406,6 @@ func (task *Task) Deserialize(jsonData string) {
 			ending.Rect.X = ending.Position.X
 			ending.Rect.Y = ending.Position.Y
 		}
-	}
-
-	if hasData(`MapData`) {
-
-		if task.MapImage == nil {
-			task.MapImage = NewMapImage(task)
-		}
-
-		for y, row := range gjson.Get(jsonData, `MapData`).Array() {
-			for x, value := range row.Array() {
-				task.MapImage.Data[y][x] = int32(value.Int())
-			}
-		}
-
-		task.MapImage.cellWidth = int(int32(task.DisplaySize.X) / task.Board.Project.GridSize)
-		task.MapImage.cellHeight = int((int32(task.DisplaySize.Y) - task.Board.Project.GridSize) / task.Board.Project.GridSize)
-		task.MapImage.Changed = true
 	}
 
 	if hasData(`Whiteboard`) {
@@ -641,65 +427,16 @@ func (task *Task) Deserialize(jsonData string) {
 
 	// We do this to update the task after loading all of the information.
 	task.LoadResource()
-
-	if task.SoundControl != nil {
-		task.SoundControl.Paused = true
-		if gjson.Get(jsonData, `SoundPaused`).Exists() {
-			task.SoundControl.Paused = getBool(`SoundPaused`)
-		}
-	}
 }
 
 func (task *Task) Update() {
 
-	if task.Is(TASK_TYPE_MAP) {
-		task.MinSize = rl.Vector2{64, 80}
-		task.MaxSize = rl.Vector2{512, 512 + 16}
-	} else if task.Is(TASK_TYPE_WHITEBOARD) {
+	if task.Is(TASK_TYPE_WHITEBOARD) {
 		task.MinSize = rl.Vector2{128, 80}
 		task.MaxSize = rl.Vector2{512, 512 + 16}
 	} else {
 		task.MinSize = rl.Vector2{16, 16}
 		task.MaxSize = rl.Vector2{0, 0}
-	}
-
-	if task.SoundComplete {
-
-		// We want to lock and unlock the speaker as little as possible, and only when manipulating streams or controls.
-
-		speaker.Lock()
-
-		task.SoundComplete = false
-		task.SoundControl.Paused = true
-		task.SoundStream.Seek(0)
-
-		speaker.Unlock()
-
-		speaker.Play(beep.Seq(task.SoundControl, beep.Callback(task.OnSoundCompletion)))
-
-		speaker.Lock()
-
-		above := task.TaskAbove
-
-		if task.TaskBelow != nil && task.TaskBelow.Is(TASK_TYPE_SOUND) && task.TaskBelow.SoundControl != nil {
-			task.SoundControl.Paused = true
-			task.TaskBelow.SoundControl.Paused = false
-		} else if above != nil {
-
-			for above.TaskAbove != nil && above.TaskAbove.SoundControl != nil && above.Is(TASK_TYPE_SOUND) {
-				above = above.TaskAbove
-			}
-
-			if above != nil {
-				task.SoundControl.Paused = true
-				above.SoundControl.Paused = false
-			}
-		} else {
-			task.SoundControl.Paused = false
-		}
-
-		speaker.Unlock()
-
 	}
 
 	if task.Selected && task.Dragging && !task.Resizing {
@@ -739,12 +476,6 @@ func (task *Task) Update() {
 	cameraRect := rl.Rectangle{camera.Target.X - (scrW / 2), camera.Target.Y - (scrH / 2), scrW, scrH}
 
 	if task.Board.Project.FullyInitialized {
-		if task.Complete() && task.CompletionTime.IsZero() {
-			task.CompletionTime = time.Now()
-		} else if !task.Complete() {
-			task.CompletionTime = time.Time{}
-		}
-
 		if !rl.CheckCollisionRecs(task.Rect, cameraRect) {
 			task.Visible = false
 		}
@@ -837,12 +568,6 @@ func (task *Task) Update() {
 				task.DisplaySize.Y = float32(task.Image.Height)
 			}
 
-		case TASK_TYPE_MAP:
-			if task.MapImage != nil {
-				iy := task.DisplaySize.Y - float32(task.Board.Project.GridSize)
-				task.MapImage.Resize(task.DisplaySize.X, iy)
-			}
-
 		case TASK_TYPE_WHITEBOARD:
 			if task.Whiteboard != nil {
 				iy := task.DisplaySize.Y - float32(task.Board.Project.GridSize)
@@ -891,48 +616,6 @@ func (task *Task) DrawLine() {
 
 func (task *Task) Draw() {
 
-	if task.Board.Project.BracketSubtasks.Checked && len(task.SubTasks) > 0 {
-
-		endingTask := task.SubTasks[len(task.SubTasks)-1]
-
-		for len(endingTask.SubTasks) != 0 {
-			endingTask = endingTask.SubTasks[len(endingTask.SubTasks)-1]
-		}
-
-		ep := endingTask.Position
-		ep.Y += endingTask.Rect.Height
-
-		gh := float32(task.Board.Project.GridSize / 2)
-		lines := []rl.Vector2{
-			{task.Position.X, task.Position.Y + gh},
-			{task.Position.X - gh, task.Position.Y + gh},
-			{task.Position.X - gh, ep.Y - gh},
-			{ep.X, ep.Y - gh},
-		}
-
-		lineColor := getThemeColor(GUI_INSIDE)
-
-		ts := []*Task{}
-		ts = append(ts, task.SubTasks...)
-		ts = append(ts, task)
-
-		for _, t := range ts {
-			if t.Selected {
-				lineColor = getThemeColor(GUI_OUTLINE_HIGHLIGHTED)
-				break
-			}
-		}
-
-		for i := range lines {
-			if i == len(lines)-1 {
-				break
-			}
-			rl.DrawLineEx(lines[i], lines[i+1], 1, lineColor)
-		}
-		// rl.DrawLineEx(task.Position, ep, 1, rl.White)
-
-	}
-
 	if !task.Visible {
 		return
 	}
@@ -948,95 +631,16 @@ func (task *Task) Draw() {
 	case TASK_TYPE_IMAGE:
 		_, filename := filepath.Split(task.FilePathTextbox.Text())
 		name = filename
-	case TASK_TYPE_SOUND:
-		_, filename := filepath.Split(task.FilePathTextbox.Text())
-		name = filename
-	case TASK_TYPE_BOOLEAN:
-		fallthrough
-	case TASK_TYPE_PROGRESSION:
-		cut := strings.Index(name, "\n")
-		if cut >= 0 {
-			if task.Board.Project.ShowIcons.Checked {
-				extendedText = true
-			}
-			name = name[:cut]
-		}
 	}
 
-	if len(task.SubTasks) > 0 && task.Completable() {
-		currentFinished := 0
-		for _, child := range task.SubTasks {
-			if child.Complete() {
-				currentFinished++
-			}
-		}
-		name = fmt.Sprintf("%s (%d / %d)", name, currentFinished, len(task.SubTasks))
-	} else if task.Is(TASK_TYPE_PROGRESSION) {
-		name = fmt.Sprintf("%s (%d / %d)", name, task.CompletionProgressionCurrent.Number(), task.CompletionProgressionMax.Number())
-	}
-
-	sequenceType := task.Board.Project.NumberingSequence.CurrentChoice
-	if sequenceType != NUMBERING_SEQUENCE_OFF && task.NumberingPrefix[0] != -1 && task.Completable() {
-		n := ""
-
-		for i, value := range task.NumberingPrefix {
-
-			if !task.Board.Project.NumberTopLevel.Checked && i == 0 {
-				continue
-			}
-
-			romanNumber := roman.NewRoman().ToRoman(value)
-
-			switch sequenceType {
-			case NUMBERING_SEQUENCE_NUMBER:
-				n += fmt.Sprintf("%d.", value)
-			case NUMBERING_SEQUENCE_NUMBER_DASH:
-				if i == len(task.NumberingPrefix)-1 {
-					n += fmt.Sprintf("%d)", value)
-				} else {
-					n += fmt.Sprintf("%d-", value)
-				}
-			case NUMBERING_SEQUENCE_BULLET:
-				fallthrough
-			case NUMBERING_SEQUENCE_SQUARE:
-				fallthrough
-			case NUMBERING_SEQUENCE_STAR:
-				n += "   "
-			case NUMBERING_SEQUENCE_ROMAN:
-				n += fmt.Sprintf("%s.", romanNumber)
-
-			}
-		}
-		task.PrefixText = n
-		name = fmt.Sprintf("%s %s", task.PrefixText, name)
-	}
-
-	invalidImage := task.Image.ID == 0 && task.GifAnimation == nil
+	invalidImage := task.Image.ID == 0 
 	if !invalidImage && task.Is(TASK_TYPE_IMAGE) {
 		name = ""
 	}
 
-	if task.Completable() && !task.Complete() && task.DeadlineCheckbox.Checked {
-		// If there's a deadline, let's tell you how long you have
-		deadlineDuration := task.CalculateDeadlineDuration()
-		deadlineDuration += time.Hour * 24
-		if deadlineDuration.Hours() > 24 {
-			duration, _ := durafmt.ParseString(deadlineDuration.String())
-			duration.LimitFirstN(1)
-			name += " | Due in " + duration.String()
-		} else if deadlineDuration.Hours() >= 0 {
-			name += " | Due today!"
-		} else {
-			duration, _ := durafmt.ParseString((-deadlineDuration).String())
-			duration.LimitFirstN(1)
-			name += fmt.Sprintf(" | Overdue by %s!", duration.String())
-		}
-
-	}
-
 	taskDisplaySize := task.DisplaySize
 
-	if !task.Is(TASK_TYPE_IMAGE, TASK_TYPE_MAP, TASK_TYPE_WHITEBOARD) {
+	if !task.Is(TASK_TYPE_IMAGE, TASK_TYPE_WHITEBOARD) {
 
 		taskDisplaySize = rl.MeasureTextEx(font, name, float32(programSettings.FontSize), spacing)
 
@@ -1048,10 +652,6 @@ func (task *Task) Draw() {
 			taskDisplaySize.X += 16
 			if extendedText {
 				taskDisplaySize.X += 16
-			}
-
-			if task.Is(TASK_TYPE_SOUND) {
-				taskDisplaySize.X += 32
 			}
 		}
 
@@ -1080,7 +680,7 @@ func (task *Task) Draw() {
 		taskDisplaySize.Y = task.MaxSize.Y
 	}
 
-	if (task.Is(TASK_TYPE_IMAGE) && task.Image.ID != 0) || task.Is(TASK_TYPE_MAP) || task.Is(TASK_TYPE_WHITEBOARD) {
+	if (task.Is(TASK_TYPE_IMAGE) && task.Image.ID != 0) || task.Is(TASK_TYPE_WHITEBOARD) {
 		if task.Rect.Width != taskDisplaySize.X || task.Rect.Height != taskDisplaySize.Y {
 			task.Rect.Width = taskDisplaySize.X
 			task.Rect.Height = taskDisplaySize.Y
@@ -1097,10 +697,6 @@ func (task *Task) Draw() {
 
 	color := getThemeColor(GUI_INSIDE)
 
-	if task.Complete() && !task.Is(TASK_TYPE_PROGRESSION) && len(task.SubTasks) == 0 {
-		color = getThemeColor(GUI_INSIDE_HIGHLIGHTED)
-	}
-
 	if task.Is(TASK_TYPE_NOTE) {
 		color = getThemeColor(GUI_NOTE_COLOR)
 	}
@@ -1111,58 +707,7 @@ func (task *Task) Draw() {
 		outlineColor = getThemeColor(GUI_OUTLINE_HIGHLIGHTED)
 	}
 
-	// Moved this to a function because it's used for the inside and outside, and the
-	// progress bar for progression-based Tasks.
-	applyGlow := func(color rl.Color) rl.Color {
-
-		if (task.Completable() && ((task.Complete() && task.Board.Project.CompleteTasksGlow.Checked) || (!task.Complete() && task.Board.Project.IncompleteTasksGlow.Checked))) || (task.Selected && task.Board.Project.SelectedTasksGlow.Checked) {
-
-			glowVariance := float64(20)
-			if task.Selected {
-				glowVariance = 80
-			}
-
-			glow := int32(math.Sin(float64((rl.GetTime()*math.Pi*2-(float32(task.ID)*0.1))))*(glowVariance/2) + (glowVariance / 2))
-
-			color = ColorAdd(color, -glow)
-		}
-
-		return color
-
-	}
-
-	color = applyGlow(color)
-	outlineColor = applyGlow(outlineColor)
-
 	perc := float32(0)
-
-	if len(task.SubTasks) > 0 && task.Completable() {
-		totalComplete := 0
-		for _, child := range task.SubTasks {
-			if child.Complete() {
-				totalComplete++
-			}
-		}
-		perc = float32(totalComplete) / float32(len(task.SubTasks))
-	} else if task.Is(TASK_TYPE_PROGRESSION) {
-
-		cnum := task.CompletionProgressionCurrent.Number()
-		mnum := task.CompletionProgressionMax.Number()
-
-		if mnum < cnum {
-			task.CompletionProgressionMax.SetNumber(cnum)
-			mnum = cnum
-		}
-
-		if mnum != 0 {
-			perc = float32(cnum) / float32(mnum)
-		}
-
-	} else if task.Is(TASK_TYPE_SOUND) && task.SoundStream != nil {
-		pos := task.SoundStream.Position()
-		len := task.SoundStream.Len()
-		perc = float32(pos) / float32(len)
-  }
 
 	if perc > 1 {
 		perc = 1
@@ -1186,7 +731,7 @@ func (task *Task) Draw() {
 	}
 
 	bgRect := task.Rect
-	if task.Is(TASK_TYPE_MAP, TASK_TYPE_WHITEBOARD) {
+	if task.Is(TASK_TYPE_WHITEBOARD) {
 		bgRect.Height = 16 // For a Map, the background is effectively transparent
 	}
 
@@ -1210,17 +755,12 @@ func (task *Task) Draw() {
 	if task.PercentageComplete != 0 {
 		rect := task.Rect
 		rect.Width *= task.PercentageComplete
-		rectColor := applyGlow(getThemeColor(GUI_INSIDE_HIGHLIGHTED))
+		rectColor := getThemeColor(GUI_INSIDE_HIGHLIGHTED)
 		rectColor.A = alpha
 		//rl.DrawRectangleRec(rect, rectColor)
 	}
 
 	if task.Is(TASK_TYPE_IMAGE) {
-
-		if task.GifAnimation != nil {
-			task.Image = task.GifAnimation.GetTexture()
-			task.GifAnimation.Update(task.Board.Project.GetFrameTime())
-		}
 
 		if task.Image.ID != 0 {
 
@@ -1236,45 +776,6 @@ func (task *Task) Draw() {
 			rl.DrawTexturePro(task.Image, src, dst, rl.Vector2{}, 0, color)
 
 		}
-
-	}
-
-	if task.Is(TASK_TYPE_MAP) && task.MapImage != nil {
-
-		task.MapImage.Update()
-
-		bgColor := rl.Black
-		bgColor.A = 64
-		color := rl.White
-		if task.Board.Project.GraphicalTasksTransparent.Checked {
-			color.A = alpha
-		}
-		gs := float32(task.Board.Project.GridSize)
-		src := rl.Rectangle{0, 0, float32(task.MapImage.Texture.Texture.Width), -float32(task.MapImage.Texture.Texture.Height)}
-		dst := rl.Rectangle{task.Rect.X, task.Rect.Y + gs, float32(task.MapImage.Texture.Texture.Width), float32(task.MapImage.Texture.Texture.Height)}
-
-		if task.MapImage.Editing {
-			bgColor = getThemeColor(GUI_INSIDE_HIGHLIGHTED)
-			color.A = 255
-		} else {
-			themeColor := getThemeColor(GUI_INSIDE_DISABLED)
-			if themeColor.R < 128 && themeColor.G < 128 && themeColor.B < 128 {
-				bgColor.R = rl.White.R
-				bgColor.G = rl.White.G
-				bgColor.B = rl.White.B
-			}
-		}
-
-		rl.DrawRectanglePro(
-			rl.Rectangle{task.Rect.X,
-				task.Rect.Y + gs,
-				task.MapImage.Width(),
-				task.MapImage.Height()},
-			rl.Vector2{},
-			0,
-			[]rl.Color{bgColor})
-
-		rl.DrawTexturePro(task.MapImage.Texture.Texture, src, dst, rl.Vector2{}, 0, color)
 
 	}
 
@@ -1319,20 +820,17 @@ func (task *Task) Draw() {
 	if task.Board.Project.OutlineTasks.Checked && !task.Is(TASK_TYPE_LINE) {
 		rl.DrawRectangleLinesEx(task.Rect, 1, outlineColor)
 	}
-	if !task.Is(TASK_TYPE_IMAGE, TASK_TYPE_LINE, TASK_TYPE_MAP, TASK_TYPE_WHITEBOARD) {
+	if !task.Is(TASK_TYPE_IMAGE, TASK_TYPE_LINE, TASK_TYPE_WHITEBOARD) {
 
 		textPos := rl.Vector2{task.Rect.X + 2, task.Rect.Y + 2}
 
 		if task.Board.Project.ShowIcons.Checked {
 			textPos.X += 16
 		}
-		if task.Is(TASK_TYPE_SOUND) {
-			textPos.X += 32
-		}
 
 		DrawText(textPos, name)
 
-		if !task.Board.Project.TaskOpen && !task.Board.Project.Searchbar.Focused && !task.Board.Project.ProjectSettingsOpen && task.Board.Project.PopupAction == "" && (task.Is(TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION, TASK_TYPE_NOTE)) {
+		if !task.Board.Project.TaskOpen && !task.Board.Project.Searchbar.Focused && !task.Board.Project.ProjectSettingsOpen && task.Board.Project.PopupAction == "" && (task.Is(TASK_TYPE_NOTE)) {
 
 			if name != task.DisplayedText {
 				task.ScanTextForURLs(name)
@@ -1361,40 +859,21 @@ func (task *Task) Draw() {
 
 	}
 
-	controlPos := float32(0)
-
 	if task.Board.Project.ShowIcons.Checked {
-
-		controlPos = 16
 
 		iconColor := getThemeColor(GUI_FONT_COLOR)
 		iconSrc := rl.Rectangle{16, 0, 16, 16}
 		rotation := float32(0)
 
 		iconSrcIconPositions := map[int][]float32{
-			TASK_TYPE_BOOLEAN:     {0, 0},
-			TASK_TYPE_PROGRESSION: {32, 0},
 			TASK_TYPE_NOTE:        {64, 0},
-			TASK_TYPE_SOUND:       {80, 0},
 			TASK_TYPE_IMAGE:       {96, 0},
 			TASK_TYPE_LINE:        {128, 32},
-			TASK_TYPE_MAP:         {0, 32},
 			TASK_TYPE_WHITEBOARD:  {64, 16},
-		}
-
-		if task.Is(TASK_TYPE_SOUND) {
-			if task.SoundStream == nil || task.SoundControl.Paused {
-				iconColor = getThemeColor(GUI_OUTLINE)
-			}
 		}
 
 		iconSrc.X = iconSrcIconPositions[task.TaskType.CurrentChoice][0]
 		iconSrc.Y = iconSrcIconPositions[task.TaskType.CurrentChoice][1]
-
-		if len(task.SubTasks) > 0 && task.Completable() {
-			iconSrc.X = 128 // Hardcoding this because I'm an idiot
-			iconSrc.Y = 16
-		}
 
 		// task.ArrowPointingToTask = nil
 
@@ -1422,15 +901,6 @@ func (task *Task) Draw() {
 
 		}
 
-		if task.Complete() {
-			iconSrc.X += 16
-			iconColor = getThemeColor(GUI_OUTLINE_HIGHLIGHTED)
-		}
-
-		if task.Is(TASK_TYPE_SOUND) && task.SoundStream == nil {
-			iconSrc.Y += 16
-		}
-
 		if !task.Is(TASK_TYPE_IMAGE) || invalidImage {
 			if task.Is(TASK_TYPE_LINE) {
 				if task.Board.Project.OutlineTasks.Checked {
@@ -1446,82 +916,6 @@ func (task *Task) Draw() {
 			iconSrc.X = 112
 			iconSrc.Y = 0
 			rl.DrawTexturePro(task.Board.Project.GUI_Icons, iconSrc, rl.Rectangle{task.Rect.X + taskDisplaySize.X - 16, task.Rect.Y, 16, 16}, rl.Vector2{}, 0, iconColor)
-		}
-
-		if task.Completable() && !task.Complete() && task.DeadlineCheckbox.Checked {
-
-			deadlineAnimate := task.Board.Project.DeadlineAnimation.CurrentChoice
-
-			if deadlineAnimate < 3 {
-				clockPos := rl.Vector2{0, 0}
-				iconSrc = rl.Rectangle{144, 0, 16, 16}
-
-				if task.Due() == TASK_DUE_LATE {
-					iconSrc.X += 32
-				} else if task.Due() == TASK_DUE_TODAY {
-					iconSrc.X += 16
-				} // else it's due in the future, so just a clock icon is fine
-
-				if deadlineAnimate == 0 || (deadlineAnimate == 1 && task.Due() == TASK_DUE_LATE) {
-					clockPos.X += float32(math.Sin(float64(float32(task.ID)*0.1)+float64(rl.GetTime())*3.1415)) * 4
-				}
-
-				rl.DrawTexturePro(task.Board.Project.GUI_Icons, iconSrc, rl.Rectangle{task.Rect.X - 16 + clockPos.X, task.Rect.Y + clockPos.Y, 16, 16}, rl.Vector2{0, 0}, 0, rl.White)
-
-			}
-
-		}
-
-	}
-
-	if task.NumberingPrefix[0] != -1 && task.Completable() {
-
-		numberingIcon := map[int]rl.Rectangle{
-			NUMBERING_SEQUENCE_BULLET: rl.Rectangle{176, 32, 8, 8},
-			NUMBERING_SEQUENCE_SQUARE: rl.Rectangle{184, 32, 8, 8},
-			NUMBERING_SEQUENCE_STAR:   rl.Rectangle{192, 32, 8, 8},
-		}
-
-		if src, exists := numberingIcon[task.Board.Project.NumberingSequence.CurrentChoice]; exists {
-			x := float32(18)
-
-			if !task.Board.Project.ShowIcons.Checked {
-				x -= 16
-			}
-
-			bulletCount := len(task.NumberingPrefix)
-			if !task.Board.Project.NumberTopLevel.Checked {
-				bulletCount--
-			}
-
-			for i := 0; i < bulletCount; i++ {
-				rl.DrawTexturePro(task.Board.Project.GUI_Icons, src, rl.Rectangle{task.Rect.X + x, task.Rect.Y + 4, src.Width, src.Height}, rl.Vector2{}, 0, getThemeColor(GUI_FONT_COLOR))
-				x += src.Width
-			}
-
-		}
-
-	}
-
-  if task.Is(TASK_TYPE_SOUND) {
-
-		x := task.Rect.X + controlPos
-		y := task.Rect.Y
-
-		srcX := float32(16)
-		if task.SoundControl != nil && !task.SoundControl.Paused {
-			srcX += 16
-		}
-
-		if task.SmallButton(srcX, 16, 16, 16, x, y) && task.SoundControl != nil {
-			task.ToggleSound()
-		}
-		if task.SmallButton(48, 16, 16, 16, x+16, y) && task.SoundControl != nil {
-			speaker.Lock()
-			task.SoundStream.Seek(0)
-			speaker.Unlock()
-			_, filename := filepath.Split(task.FilePathTextbox.Text())
-			task.Board.Project.Log("Sound Task [%s] restarted.", filename)
 		}
 	}
 
@@ -1562,165 +956,13 @@ func (task *Task) Depth() int {
 
 	depth := 0
 
-	if task.Is(TASK_TYPE_MAP, TASK_TYPE_WHITEBOARD) {
+	if task.Is(TASK_TYPE_WHITEBOARD) {
 		depth = -100
 	} else if task.Is(TASK_TYPE_LINE) {
 		depth = 100
 	}
 
 	return depth
-
-}
-
-func (task *Task) UpdateNeighbors() {
-
-	gs := float32(task.Board.Project.GridSize)
-
-	task.TaskRight = nil
-	task.TaskLeft = nil
-	task.TaskAbove = nil
-	task.TaskBelow = nil
-	task.TaskUnder = nil
-
-	tasks := task.Board.GetTasksInRect(task.Position.X+gs, task.Position.Y, task.Rect.Width, task.Rect.Height)
-	sortfunc := func(i, j int) bool {
-		return tasks[i].Numberable() || (tasks[i].Is(TASK_TYPE_NOTE) && !tasks[j].Numberable()) // Prioritize numberable Tasks or Notes to be counted as neighbors (though other Tasks can be neighbors still)
-	}
-
-	sort.Slice(tasks, sortfunc)
-	for _, t := range tasks {
-		if t != task {
-			task.TaskRight = t
-			break
-		}
-	}
-
-	tasks = task.Board.GetTasksInRect(task.Position.X-gs, task.Position.Y, task.Rect.Width, task.Rect.Height)
-	sort.Slice(tasks, sortfunc)
-
-	for _, t := range tasks {
-		if t != task {
-			task.TaskLeft = t
-			break
-		}
-	}
-
-	tasks = task.Board.GetTasksInRect(task.Position.X, task.Position.Y-gs, task.Rect.Width, task.Rect.Height)
-	sort.Slice(tasks, sortfunc)
-
-	for _, t := range tasks {
-		if t != task {
-			task.TaskAbove = t
-			break
-		}
-	}
-
-	tasks = task.Board.GetTasksInRect(task.Position.X, task.Position.Y+gs, task.Rect.Width, task.Rect.Height)
-	sort.Slice(tasks, sortfunc)
-	for _, t := range tasks {
-		if t != task {
-			task.TaskBelow = t
-			break
-		}
-	}
-
-	tasks = task.Board.GetTasksInRect(task.Position.X, task.Position.Y, task.Rect.Width, task.Rect.Height)
-	sort.Slice(tasks, sortfunc)
-	for _, t := range tasks {
-		if t != task {
-			task.TaskUnder = t
-			break
-		}
-	}
-
-}
-
-func (task *Task) DeadlineTime() time.Time {
-	return time.Date(task.DeadlineYearSpinner.Number(), time.Month(task.DeadlineMonthSpinner.CurrentChoice+1), task.DeadlineDaySpinner.Number(), 0, 0, 0, 0, time.Now().Location())
-}
-
-func (task *Task) CalculateDeadlineDuration() time.Duration {
-	return task.DeadlineTime().Sub(time.Now())
-}
-
-func (task *Task) Due() int {
-	if !task.Complete() && task.Completable() && task.DeadlineCheckbox.Checked {
-		// If there's a deadline, let's tell you how long you have
-		deadlineDuration := task.CalculateDeadlineDuration()
-		if deadlineDuration.Hours() > 0 {
-			return TASK_DUE_FUTURE
-		} else if deadlineDuration.Hours() >= -24 {
-			return TASK_DUE_TODAY
-		} else {
-			return TASK_DUE_LATE
-		}
-	}
-	return TASK_NOT_DUE
-}
-
-func (task *Task) DrawShadow() {
-
-	if task.Visible && !task.Is(TASK_TYPE_LINE) {
-
-		depthRect := task.Rect
-		shadowColor := getThemeColor(GUI_SHADOW_COLOR)
-
-		if task.Board.Project.TaskTransparency.Number() < 255 {
-			t := float32(task.Board.Project.TaskTransparency.Number())
-			alpha := uint8((t / float32(task.Board.Project.TaskTransparency.Maximum)) * (255 - 32))
-			shadowColor.A = 32 + alpha
-		}
-
-		if task.Board.Project.TaskShadowSpinner.CurrentChoice == 2 || task.Board.Project.TaskShadowSpinner.CurrentChoice == 3 {
-
-			src := rl.Rectangle{224, 0, 8, 8}
-			if task.Board.Project.TaskShadowSpinner.CurrentChoice == 3 {
-				src.X = 248
-			}
-
-			dst := depthRect
-			dst.X += dst.Width
-			dst.Width = src.Width
-			dst.Height = src.Height
-			rl.DrawTexturePro(task.Board.Project.GUI_Icons, src, dst, rl.Vector2{0, 0}, 0, shadowColor)
-
-			src.Y += src.Height
-			dst.Y += src.Height
-			dst.Height = depthRect.Height - src.Height
-			rl.DrawTexturePro(task.Board.Project.GUI_Icons, src, dst, rl.Vector2{0, 0}, 0, shadowColor)
-
-			src.Y += src.Height
-			dst.Y += dst.Height
-			dst.Height = src.Height
-			rl.DrawTexturePro(task.Board.Project.GUI_Icons, src, dst, rl.Vector2{0, 0}, 0, shadowColor)
-
-			src.X -= src.Width
-			dst.X = depthRect.X + src.Width
-			dst.Width = depthRect.Width - src.Width
-			rl.DrawTexturePro(task.Board.Project.GUI_Icons, src, dst, rl.Vector2{0, 0}, 0, shadowColor)
-
-			src.X -= src.Width
-			dst.X = depthRect.X
-			dst.Width = src.Width
-			rl.DrawTexturePro(task.Board.Project.GUI_Icons, src, dst, rl.Vector2{0, 0}, 0, shadowColor)
-
-		} else if task.Board.Project.TaskShadowSpinner.CurrentChoice == 1 {
-
-			depthRect.Y += depthRect.Height
-			depthRect.Height = 4
-			depthRect.X += 4
-			rl.DrawRectangleRec(depthRect, shadowColor)
-
-			depthRect.X = task.Rect.X + task.Rect.Width
-			depthRect.Y = task.Rect.Y + 4
-			depthRect.Width = 4
-			depthRect.Height = task.Rect.Height - 4
-			rl.DrawRectangleRec(depthRect, shadowColor)
-
-		}
-
-	}
-
 }
 
 func (task *Task) PostDraw() {
@@ -1730,23 +972,6 @@ func (task *Task) PostDraw() {
 		column := task.EditPanel.Columns[0]
 
 		column.Mode = task.TaskType.CurrentChoice
-
-		deadlineCheck := task.EditPanel.FindItems("deadline_on")[0]
-		deadlineCheck.On = task.Completable()
-
-		if task.Completable() {
-
-			completionTime := task.CompletionTime.Format("Monday, Jan 2, 2006, 15:04")
-			if task.CompletionTime.IsZero() {
-				completionTime = "N/A"
-			}
-			task.CompletionTimeLabel.Text = completionTime
-
-		}
-
-		for _, option := range task.EditPanel.FindItems("deadline_sub") {
-			option.On = deadlineCheck.On && task.DeadlineCheckbox.Checked
-		}
 
 		task.CreationLabel.Text = task.CreationTime.Format("Monday, Jan 2, 2006, 15:04")
 
@@ -1788,29 +1013,6 @@ func (task *Task) PostDraw() {
 
 		}
 
-		if task.MapImage != nil {
-
-			shiftLeft := task.EditPanel.FindItems("shift left")[0].Element.(*Button)
-			shiftRight := task.EditPanel.FindItems("shift right")[0].Element.(*Button)
-			shiftUp := task.EditPanel.FindItems("shift up")[0].Element.(*Button)
-			shiftDown := task.EditPanel.FindItems("shift down")[0].Element.(*Button)
-
-			if shiftLeft.Clicked {
-				task.MapImage.Shift(-1, 0)
-			} else if shiftRight.Clicked {
-				task.MapImage.Shift(1, 0)
-			} else if shiftUp.Clicked {
-				task.MapImage.Shift(0, -1)
-			} else if shiftDown.Clicked {
-				task.MapImage.Shift(0, 1)
-			}
-
-			if clear := task.EditPanel.FindItems("clear")[0].Element.(*Button); clear.Clicked {
-				task.MapImage.Clear()
-			}
-
-		}
-
 		if task.Whiteboard != nil {
 
 			shiftLeft := task.EditPanel.FindItems("shift left")[0].Element.(*Button)
@@ -1846,71 +1048,8 @@ func (task *Task) PostDraw() {
 
 }
 
-func (task *Task) Complete() bool {
-
-	if task.Completable() && len(task.SubTasks) > 0 {
-		for _, child := range task.SubTasks {
-			if !child.Complete() {
-				return false
-			}
-		}
-		return true
-	} else {
-		if task.Is(TASK_TYPE_BOOLEAN) {
-			return task.CompletionCheckbox.Checked
-		} else if task.Is(TASK_TYPE_PROGRESSION) {
-			return task.CompletionProgressionMax.Number() > 0 && task.CompletionProgressionCurrent.Number() >= task.CompletionProgressionMax.Number()
-		}
-	}
-	return false
-}
-
-func (task *Task) Completable() bool {
-	return task.Is(TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION)
-}
-
 func (task *Task) Resizeable() bool {
-	return task.Is(TASK_TYPE_IMAGE, TASK_TYPE_MAP, TASK_TYPE_WHITEBOARD)
-}
-
-func (task *Task) SetCompletion(complete bool) {
-
-	if task.Completable() {
-
-		if len(task.SubTasks) == 0 {
-
-			task.CompletionCheckbox.Checked = complete
-
-			// VVV This is a nice addition but conversely makes it suuuuuper easy to screw yourself over
-			// for _, child := range subTasks {
-			// 	child.SetCompletion(complete)
-			// }
-
-			if complete {
-				task.CompletionProgressionCurrent.SetNumber(task.CompletionProgressionMax.Number())
-			} else {
-				task.CompletionProgressionCurrent.SetNumber(0)
-			}
-		}
-
-	} else if task.Is(TASK_TYPE_SOUND) {
-		task.ToggleSound()
-	} else if task.Is(TASK_TYPE_LINE) {
-		if task.LineBase != nil {
-			task.LineBase.Selected = true
-			task.LineBase.SetCompletion(true) // Select base
-		} else {
-			for _, ending := range task.ValidLineEndings() {
-				ending.Selected = true
-			}
-			task.Board.FocusViewOnSelectedTasks()
-		}
-	} else if task.Is(TASK_TYPE_MAP) && task.MapImage != nil {
-		task.MapImage.ToggleEditing()
-	} else if task.Is(TASK_TYPE_WHITEBOARD) && task.Whiteboard != nil {
-		task.Whiteboard.ToggleEditing()
-	}
-
+	return task.Is(TASK_TYPE_IMAGE, TASK_TYPE_WHITEBOARD)
 }
 
 func (task *Task) LoadResource() {
@@ -1929,66 +1068,17 @@ func (task *Task) LoadResource() {
 
 				if res.IsTexture() {
 
-					if task.GifAnimation != nil {
-						task.GifAnimation.Destroy()
-						task.GifAnimation = nil
-					}
 					task.Image = res.Texture()
 					if task.PrevFilePath != task.FilePathTextbox.Text() && task.DisplaySize.X == 0 && task.DisplaySize.Y == 0 {
 						task.DisplaySize.X = float32(task.Image.Width)
 						task.DisplaySize.Y = float32(task.Image.Height)
 					}
 				}
-			} else if task.Is(TASK_TYPE_SOUND) {
-
-				if task.SoundStream != nil {
-					speaker.Lock()
-					task.SoundControl.Paused = true
-					task.SoundControl.Streamer = nil
-					task.SoundControl = nil
-					speaker.Unlock()
-				}
-
-				stream, format, err := res.Audio()
-
-				if err == nil && stream != nil {
-
-					task.SoundStream = stream
-					projectSampleRate := beep.SampleRate(task.Board.Project.SampleRate.ChoiceAsInt())
-
-					if format.SampleRate != projectSampleRate {
-						task.Board.Project.Log("Sample rate of audio file %s not the same as project sample rate %d.", res.ResourcePath, projectSampleRate)
-						task.Board.Project.Log("File will be resampled.")
-						// SolarLune: Note the resample quality has to be 1 (poor); otherwise, it seems like some files will cause beep to crash with an invalid
-						// index error. Probably has to do something with how the resampling process works combined with particular sound files.
-						// For me, it crashes on playing back the file "10 3-audio.wav" on my computer repeatedly (after about 4-6 loops, it crashes).
-						task.SoundControl = &beep.Ctrl{
-							Streamer: beep.Resample(1, format.SampleRate, projectSampleRate, stream),
-							Paused:   true}
-					} else {
-						task.SoundControl = &beep.Ctrl{Streamer: stream, Paused: true}
-					}
-
-					task.SoundVolume = &effects.Volume{
-						Streamer: task.SoundControl,
-						Base:     2,
-					}
-
-					task.UpdateSoundVolume()
-
-					task.Board.Project.Log("Sound file %s loaded properly.", res.ResourcePath)
-					speaker.Play(beep.Seq(task.SoundVolume, beep.Callback(task.OnSoundCompletion)))
-
-				}
-
-			}
+      }
 
 			task.PrevFilePath = task.FilePathTextbox.Text()
-
 		}
-
 	}
-
 }
 
 func (task *Task) ReceiveMessage(message string, data map[string]interface{}) {
@@ -2020,19 +1110,12 @@ func (task *Task) ReceiveMessage(message string, data map[string]interface{}) {
 
 		if task.LineBase != nil {
 			task.LineBase.ReceiveMessage(MessageDoubleClick, nil)
-		} else if (!task.Is(TASK_TYPE_MAP) || task.MapImage == nil || !task.MapImage.Editing) && (!task.Is(TASK_TYPE_WHITEBOARD) || task.Whiteboard == nil || !task.Whiteboard.Editing) {
+		} else if (!task.Is(TASK_TYPE_WHITEBOARD) || task.Whiteboard == nil || !task.Whiteboard.Editing) {
 
 			// We have to consume after double-clicking so you don't click outside of the new panel and exit it immediately
 			// or actuate a GUI element accidentally. HOWEVER, we want it here because double-clicking might not actually
 			// open the Task, as can be seen here
 			ConsumeMouseInput(rl.MouseLeftButton)
-
-			if !task.DeadlineCheckbox.Checked {
-				now := time.Now()
-				task.DeadlineDaySpinner.SetNumber(now.Day())
-				task.DeadlineMonthSpinner.SetChoice(now.Month().String())
-				task.DeadlineYearSpinner.SetNumber(time.Now().Year())
-			}
 
 			task.Open = true
 			task.Board.Project.TaskOpen = true
@@ -2059,15 +1142,6 @@ func (task *Task) ReceiveMessage(message string, data map[string]interface{}) {
 			task.LoadResource()
 			task.Board.Project.PreviousTaskType = task.TaskType.ChoiceAsString()
 
-			if task.Is(TASK_TYPE_MAP) {
-				if task.MapImage == nil {
-					task.MapImage = NewMapImage(task)
-				}
-				task.DisplaySize.X = task.MapImage.Width()
-				task.DisplaySize.Y = task.MapImage.Height() + float32(task.Board.Project.GridSize)
-				task.MapImage.Update()
-			}
-
 			if task.Is(TASK_TYPE_WHITEBOARD) {
 				if task.Whiteboard == nil {
 					task.Whiteboard = NewWhiteboard(task)
@@ -2092,7 +1166,7 @@ func (task *Task) ReceiveMessage(message string, data map[string]interface{}) {
 
 		}
 	} else if message == MessageDragging {
-		if task.Selected && ((task.MapImage == nil || !task.MapImage.Editing) && (task.Whiteboard == nil || !task.Whiteboard.Editing)) {
+		if task.Selected && (task.Whiteboard == nil || !task.Whiteboard.Editing) {
 			if !task.Dragging {
 				task.Board.UndoBuffer.Capture(task) // Just started dragging
 			}
@@ -2121,10 +1195,6 @@ func (task *Task) ReceiveMessage(message string, data map[string]interface{}) {
 			}
 
 		}
-	} else if message == MessageNeighbors {
-		task.UpdateNeighbors()
-	} else if message == MessageNumbering {
-		task.SetPrefix()
 	} else if message == MessageDelete {
 
 		// We remove the Task from the grid but not change the GridPositions list because undos need to
@@ -2144,14 +1214,8 @@ func (task *Task) ReceiveMessage(message string, data map[string]interface{}) {
 			}
 		}
 
-		if data["task"] == task && task.SoundStream != nil && task.SoundControl != nil {
-			task.SoundControl.Paused = true
-		}
-
 	} else if message == MessageThemeChange {
-		if task.Is(TASK_TYPE_MAP) && task.MapImage != nil {
-			task.MapImage.Changed = true // Force update to change color palette
-		} else if task.Is(TASK_TYPE_WHITEBOARD) && task.Whiteboard != nil {
+		if task.Is(TASK_TYPE_WHITEBOARD) && task.Whiteboard != nil {
 			task.Whiteboard.Deserialize(task.Whiteboard.Serialize()) // De and re-serialize to change the colors
 		}
 	} else {
@@ -2251,52 +1315,6 @@ func (task *Task) CreateLineEnding() *Task {
 
 }
 
-func (task *Task) ToggleSound() {
-	if task.SoundControl != nil {
-		speaker.Lock()
-		task.SoundControl.Paused = !task.SoundControl.Paused
-
-		_, filename := filepath.Split(task.FilePathTextbox.Text())
-		if task.SoundControl.Paused {
-			task.Board.Project.Log("Paused [%s].", filename)
-		} else {
-			task.Board.Project.Log("Playing [%s].", filename)
-		}
-
-		speaker.Unlock()
-	}
-}
-
-func (task *Task) StopSound() {
-	if task.SoundControl != nil {
-		speaker.Lock()
-		task.SoundControl.Paused = true
-		speaker.Unlock()
-	}
-}
-
-func (task *Task) OnSoundCompletion() {
-	if task.SoundControl != nil && !task.SoundControl.Paused {
-		task.SoundComplete = true
-	}
-}
-
-func (task *Task) UpdateSoundVolume() {
-	speaker.Lock()
-	task.SoundVolume.Volume = float64(task.Board.Project.SoundVolume.Number()-10) / 2
-	task.SoundVolume.Silent = task.Board.Project.SoundVolume.Number() == 0
-	speaker.Unlock()
-}
-
-func (task *Task) ToggleTimer() {
-	task.TimerRunning = !task.TimerRunning
-	if task.TimerRunning {
-		task.Board.Project.Log("Timer [%s] started.", task.TimerName.Text())
-	} else {
-		task.Board.Project.Log("Timer [%s] paused.", task.TimerName.Text())
-	}
-}
-
 func (task *Task) NeighborInDirection(dirX, dirY float32) *Task {
 	if dirX > 0 {
 		return task.TaskRight
@@ -2308,110 +1326,6 @@ func (task *Task) NeighborInDirection(dirX, dirY float32) *Task {
 		return task.TaskBelow
 	}
 	return nil
-}
-
-func (task *Task) SetPrefix() {
-
-	// Establish the rest of the stack; has to be done here because it has be done after
-	// all Tasks have their positions on the Board and neighbors established.
-
-	loopIndex := 0
-
-	if task.Numberable() {
-
-		task.RestOfStack = []*Task{}
-		task.SubTasks = []*Task{}
-		below := task.TaskBelow
-		countingSubTasks := true
-
-		for countingSubTasks && below != nil && below != task {
-
-			// We want to break out in case of situations where Tasks create an infinite loop (a.Below = b, b.Below = c, c.Below = a kind of thing)
-			if loopIndex > 1000 {
-				break // Emergency in case we get stuck in a loop
-			}
-
-			if below.Numberable() {
-
-				task.RestOfStack = append(task.RestOfStack, below)
-
-				taskX, _ := task.Board.Project.WorldToGrid(task.Position.X, task.Position.Y)
-				belowX, _ := task.Board.Project.WorldToGrid(below.Position.X, below.Position.Y)
-
-				if countingSubTasks && belowX == taskX+1 {
-					task.SubTasks = append(task.SubTasks, below)
-				} else if belowX <= taskX {
-					countingSubTasks = false
-				}
-
-			}
-
-			below = below.TaskBelow
-
-			loopIndex++
-
-		}
-
-	}
-
-	above := task.TaskAbove
-
-	below := task.TaskBelow
-
-	loopIndex = 0
-
-	for above != nil && !above.Numberable() {
-
-		above = above.TaskAbove
-
-		if loopIndex > 1000 {
-			break // This SHOULD never happen, but you never know
-		}
-
-		loopIndex++
-
-	}
-
-	loopIndex = 0
-
-	for below != nil && !below.Numberable() {
-
-		below = below.TaskBelow
-
-		if loopIndex > 100 {
-			break // This SHOULD never happen, but you never know
-		}
-
-		loopIndex++
-	}
-
-	if above != nil {
-
-		task.NumberingPrefix = append([]int{}, above.NumberingPrefix...)
-
-		if above.Position.X < task.Position.X {
-			task.NumberingPrefix = append(task.NumberingPrefix, 0)
-		} else if above.Position.X > task.Position.X {
-			d := len(above.NumberingPrefix) - int((above.Position.X-task.Position.X)/float32(task.Board.Project.GridSize))
-			if d < 1 {
-				d = 1
-			}
-
-			task.NumberingPrefix = append([]int{}, above.NumberingPrefix[:d]...)
-		}
-
-		task.NumberingPrefix[len(task.NumberingPrefix)-1]++
-
-	} else if below != nil {
-		task.NumberingPrefix = []int{1}
-	} else {
-		task.NumberingPrefix = []int{-1}
-	}
-
-}
-
-func (task *Task) Numberable() bool {
-	return task.Is(TASK_TYPE_BOOLEAN, TASK_TYPE_PROGRESSION)
 }
 
 func (task *Task) SmallButton(srcX, srcY, srcW, srcH, dstX, dstY float32) bool {
@@ -2481,20 +1395,10 @@ func (task *Task) Destroy() {
 		}
 
 	}
-
-	if task.SoundStream != nil && task.SoundControl != nil {
-		task.SoundStream.Close()
-		task.SoundControl = nil
-	}
-
-	if task.GifAnimation != nil {
-		task.GifAnimation.Destroy()
-	}
-
 }
 
 func (task *Task) UsesMedia() bool {
-	return task.Is(TASK_TYPE_IMAGE, TASK_TYPE_SOUND)
+	return task.Is(TASK_TYPE_IMAGE)
 }
 
 func (task *Task) Is(taskTypes ...int) bool {

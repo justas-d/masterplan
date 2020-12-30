@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -20,9 +19,6 @@ import (
 	"github.com/tanema/gween/ease"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
-
-	"github.com/faiface/beep"
-	"github.com/faiface/beep/speaker"
 
 	"github.com/ncruces/zenity"
 
@@ -61,9 +57,6 @@ const (
 const (
 
 	// Task messages
-
-	MessageNeighbors   = "neighbors"
-	MessageNumbering   = "numbering"
 	MessageDelete      = "delete"
 	MessageSelect      = "select"
 	MessageDropped     = "dropped"
@@ -89,16 +82,12 @@ type Project struct {
 
 	// Project Settings
 	TaskShadowSpinner           *Spinner
-	SampleRate                  *Spinner
-	SetSampleRate               int
-	SampleBuffer                int
 	ShowIcons                   *Checkbox
 	PulsingTaskSelection        *Checkbox
 	AutoSave                    *Checkbox
 	AutoReloadThemes            *Checkbox
 	AutoLoadLastProject         *Checkbox
 	DisableSplashscreen         *Checkbox
-	SaveSoundsPlaying           *Checkbox
 	OutlineTasks                *Checkbox
 	ColorThemeSpinner           *Spinner
 	BracketSubtasks             *Checkbox
@@ -112,7 +101,6 @@ type Project struct {
 	TaskTransparency            *NumberSpinner
 	AlwaysShowURLButtons        *Checkbox
 	SettingsSection             *ButtonGroup
-	SoundVolume                 *NumberSpinner
 	IncompleteTasksGlow         *Checkbox
 	CompleteTasksGlow           *Checkbox
 	SelectedTasksGlow           *Checkbox
@@ -199,7 +187,6 @@ func NewProject() *Project {
 		Searchbar:          searchBar,
 		StatusBar:          rl.Rectangle{0, float32(rl.GetScreenHeight()) - 32, float32(rl.GetScreenWidth()), 32},
 		GUI_Icons:          rl.LoadTexture(GetPath("assets", "gui_icons.png")),
-		SampleBuffer:       512,
 		Patterns:           rl.LoadTexture(GetPath("assets", "patterns.png")),
 		Resources:          map[string]*Resource{},
 		LoadRecentDropdown: NewDropdown(0, 0, 0, 0, "Load Recent..."), // Position and size is set below in the context menu handling
@@ -216,8 +203,6 @@ func NewProject() *Project {
 		NumberTopLevel:              NewCheckbox(0, 0, 32, 32),
 		PulsingTaskSelection:        NewCheckbox(0, 0, 32, 32),
 		AutoSave:                    NewCheckbox(0, 0, 32, 32),
-		SaveSoundsPlaying:           NewCheckbox(0, 0, 32, 32),
-		SampleRate:                  NewSpinner(0, 0, 192, 32, "22050", "44100", "48000", "88200", "96000"),
 		BracketSubtasks:             NewCheckbox(0, 0, 32, 32),
 		LockProject:                 NewCheckbox(0, 0, 32, 32),
 		AutomaticBackupInterval:     NewNumberSpinner(0, 0, 128, 40),
@@ -225,11 +210,10 @@ func NewProject() *Project {
 		MaxUndoSteps:                NewNumberSpinner(0, 0, 192, 40),
 		TaskTransparency:            NewNumberSpinner(0, 0, 128, 40),
 		AlwaysShowURLButtons:        NewCheckbox(0, 0, 32, 32),
-		SettingsSection:             NewButtonGroup(0, 0, 700, 32, 1, "General", "Tasks", "Audio", "Global", "Shortcuts"),
+		SettingsSection:             NewButtonGroup(0, 0, 700, 32, 1, "General", "Tasks", "Global", "Shortcuts"),
 		RebindingButtons:            []*Button{},
 		DefaultRebindingButtons:     []*Button{},
 		RebindingHeldKeys:           []int32{},
-		SoundVolume:                 NewNumberSpinner(0, 0, 128, 40),
 		IncompleteTasksGlow:         NewCheckbox(0, 0, 32, 32),
 		CompleteTasksGlow:           NewCheckbox(0, 0, 32, 32),
 		SelectedTasksGlow:           NewCheckbox(0, 0, 32, 32),
@@ -367,22 +351,6 @@ func NewProject() *Project {
 	row = column.Row()
 	row.Item(project.DeadlineAnimation, SETTINGS_TASKS)
 
-	// Audio
-
-	column.DefaultVerticalSpacing = -1
-
-	row = column.Row()
-	row.Item(NewLabel("Volume:"), SETTINGS_AUDIO)
-	row.Item(project.SoundVolume, SETTINGS_AUDIO)
-
-	row = column.Row()
-	row.Item(NewLabel("Project Samplerate:"), SETTINGS_AUDIO)
-	row.Item(project.SampleRate, SETTINGS_AUDIO)
-
-	row = column.Row()
-	row.Item(NewLabel("Save Sound Playback:"), SETTINGS_AUDIO)
-	row.Item(project.SaveSoundsPlaying, SETTINGS_AUDIO)
-
 	// Keyboard
 
 	column.DefaultVerticalSpacing = 24
@@ -495,9 +463,6 @@ func NewProject() *Project {
 	project.TaskTransparency.Maximum = 5
 	project.TaskTransparency.Minimum = 1
 	project.TaskTransparency.SetNumber(5)
-	project.SoundVolume.Maximum = 10
-	project.SoundVolume.Minimum = 0
-	project.SoundVolume.SetNumber(8)
 	project.IncompleteTasksGlow.Checked = true
 	project.CompleteTasksGlow.Checked = true
 	project.SelectedTasksGlow.Checked = true
@@ -522,14 +487,6 @@ func NewProject() *Project {
 
 	project.ReloadThemes()
 	project.ChangeTheme(currentTheme)
-
-	if strings.Contains(runtime.GOOS, "darwin") {
-		project.SampleRate.SetChoice("22050") // For some reason, sound on Mac is choppy unless the project's sample rate is 22050.
-	} else {
-		project.SampleRate.SetChoice("44100")
-	}
-	speaker.Init(beep.SampleRate(project.SampleRate.ChoiceAsInt()), project.SampleBuffer)
-	project.SetSampleRate = project.SampleRate.ChoiceAsInt()
 
 	return project
 
@@ -622,14 +579,10 @@ func (project *Project) Save(backup bool) {
 			data, _ = sjson.Set(data, `NumberingSequence`, project.NumberingSequence.CurrentChoice)
 			data, _ = sjson.Set(data, `PulsingTaskSelection`, project.PulsingTaskSelection.Checked)
 			data, _ = sjson.Set(data, `GridSize`, project.GridSize)
-			data, _ = sjson.Set(data, `SampleRate`, project.SampleRate.ChoiceAsInt())
-			data, _ = sjson.Set(data, `SampleBuffer`, project.SampleBuffer)
-			data, _ = sjson.Set(data, `SaveSoundsPlaying`, project.SaveSoundsPlaying.Checked)
 			data, _ = sjson.Set(data, `BackupInterval`, project.AutomaticBackupInterval.Number())
 			data, _ = sjson.Set(data, `BackupKeepCount`, project.AutomaticBackupKeepCount.Number())
 			data, _ = sjson.Set(data, `UndoMaxSteps`, project.MaxUndoSteps.Number())
 			data, _ = sjson.Set(data, `AlwaysShowURLButtons`, project.AlwaysShowURLButtons.Checked)
-			data, _ = sjson.Set(data, `SoundVolume`, project.SoundVolume.Number())
 			data, _ = sjson.Set(data, `IncompleteTasksGlow`, project.IncompleteTasksGlow.Checked)
 			data, _ = sjson.Set(data, `CompleteTasksGlow`, project.CompleteTasksGlow.Checked)
 			data, _ = sjson.Set(data, `SelectedTasksGlow`, project.SelectedTasksGlow.Checked)
@@ -675,16 +628,12 @@ func (project *Project) Save(backup bool) {
 
 		if success {
 			if !backup {
-				project.Log("Save successful.")
 				// Modified flag only gets cleared on manual saves, not automatic backups
 				project.Modified = false
-			} else {
-				project.Log("Backup successful.")
 			}
 		} else {
 			project.Log("ERROR: Save / backup unsuccessful.")
 		}
-
 	}
 
 }
@@ -744,8 +693,6 @@ func LoadProject(filepath string) *Project {
 			project.CameraPan.X = getFloat(`Pan\.X`)
 			project.CameraPan.Y = getFloat(`Pan\.Y`)
 			project.Zoom = getFloat(`Zoom`)
-			project.SampleRate.SetChoice(getString(`SampleRate`))
-			project.SampleBuffer = getInt(`SampleBuffer`)
 			project.TaskShadowSpinner.CurrentChoice = getInt(`TaskShadow`)
 			project.OutlineTasks.Checked = getBool(`OutlineTasks`)
 			project.BracketSubtasks.Checked = getBool(`BracketSubtasks`)
@@ -754,7 +701,6 @@ func LoadProject(filepath string) *Project {
 			project.NumberTopLevel.Checked = getBool(`NumberTopLevel`)
 			project.PulsingTaskSelection.Checked = getBool(`PulsingTaskSelection`)
 			project.AutoSave.Checked = getBool(`AutoSave`)
-			project.SaveSoundsPlaying.Checked = getBool(`SaveSoundsPlaying`)
 			project.BoardIndex = getInt(`BoardIndex`)
 			project.LockProject.Checked = getBool(`LockProject`)
 			project.AutomaticBackupInterval.SetNumber(getInt(`BackupInterval`))
@@ -763,10 +709,6 @@ func LoadProject(filepath string) *Project {
 			project.AlwaysShowURLButtons.Checked = getBool(`AlwaysShowURLButtons`)
 			project.GraphicalTasksTransparent.Checked = getBool(`GraphicalTasksTransparent`)
 			project.DeadlineAnimation.CurrentChoice = getInt(`DeadlineAnimation`)
-
-			if data.Get(`SoundVolume`).Exists() {
-				project.SoundVolume.SetNumber(getInt(`SoundVolume`))
-			}
 
 			if data.Get(`TaskTransparency`).Exists() {
 				project.TaskTransparency.SetNumber(getInt(`TaskTransparency`))
@@ -781,9 +723,6 @@ func LoadProject(filepath string) *Project {
 			if project.LockProject.Checked {
 				project.Locked = true
 			}
-
-			speaker.Init(beep.SampleRate(project.SampleRate.ChoiceAsInt()), project.SampleBuffer)
-			project.SetSampleRate = project.SampleRate.ChoiceAsInt()
 
 			project.LogOn = false
 
@@ -872,7 +811,6 @@ func LoadProject(filepath string) *Project {
 			programSettings.RecentPlanList = list
 
 			programSettings.Save()
-			project.Log("Load successful.")
 
 			return project
 
@@ -886,7 +824,6 @@ func LoadProject(filepath string) *Project {
 	// We log on the current project because this project didn't load correctly
 
 	currentProject.Log("Error: Could not load plan:\n[ %s ].", filepath)
-	currentProject.Log("Are you sure it's a valid MasterPlan project?")
 
 	return nil
 
@@ -903,7 +840,6 @@ func (project *Project) Log(text string, variables ...interface{}) {
 	}
 
 	log.Println(text)
-
 }
 
 func (project *Project) HandleCamera() {
@@ -1005,9 +941,6 @@ func (project *Project) Update() {
 
 	}
 
-	// Additive blending should be out here to avoid state changes mid-task drawing.
-	shadowColor := getThemeColor(GUI_SHADOW_COLOR)
-
 	sorted := append([]*Task{}, project.CurrentBoard().Tasks...)
 
 	sort.Slice(sorted, func(i, j int) bool {
@@ -1019,18 +952,6 @@ func (project *Project) Update() {
 		}
 		return sorted[i].Depth() < sorted[j].Depth()
 	})
-
-	if shadowColor.R > 254 || shadowColor.G > 254 || shadowColor.B > 254 {
-		rl.BeginBlendMode(rl.BlendAdditive)
-	}
-
-	for _, task := range sorted {
-		task.DrawShadow()
-	}
-
-	if shadowColor.R > 254 || shadowColor.G > 254 || shadowColor.B > 254 {
-		rl.EndBlendMode()
-	}
 
 	for _, task := range sorted {
 		task.Draw()
@@ -1082,12 +1003,6 @@ func (project *Project) Update() {
 					project.Selecting = true
 				} else {
 					project.Selecting = false
-
-					if removeFromSelection && clickedTask.Selected {
-						project.Log("Deselected 1 Task.")
-					} else if !removeFromSelection && !clickedTask.Selected {
-						project.Log("Selected 1 Task.")
-					}
 
 					if removeFromSelection {
 						clickedTask.ReceiveMessage(MessageSelect, map[string]interface{}{})
@@ -1190,21 +1105,10 @@ func (project *Project) Update() {
 								task.ReceiveMessage(MessageSelect, map[string]interface{}{
 									"task": t,
 								})
-
 							}
-
 						}
-
 					}
-
-					if removeFromSelection {
-						project.Log("Deselected %d Task(s).", count)
-					} else {
-						project.Log("Selected %d Task(s).", count)
-					}
-
 				}
-
 			}
 
 		} else {
@@ -1371,57 +1275,46 @@ func (project *Project) Shortcuts() {
 				if keybindings.On(KBBoard1) {
 					if len(project.Boards) > 0 {
 						project.BoardIndex = 0
-						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
 				} else if keybindings.On(KBBoard2) {
 					if len(project.Boards) > 1 {
 						project.BoardIndex = 1
-						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
 				} else if keybindings.On(KBBoard2) {
 					if len(project.Boards) > 1 {
 						project.BoardIndex = 1
-						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
 				} else if keybindings.On(KBBoard3) {
 					if len(project.Boards) > 2 {
 						project.BoardIndex = 2
-						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
 				} else if keybindings.On(KBBoard4) {
 					if len(project.Boards) > 3 {
 						project.BoardIndex = 3
-						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
 				} else if keybindings.On(KBBoard5) {
 					if len(project.Boards) > 4 {
 						project.BoardIndex = 4
-						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
 				} else if keybindings.On(KBBoard6) {
 					if len(project.Boards) > 5 {
 						project.BoardIndex = 5
-						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
 				} else if keybindings.On(KBBoard7) {
 					if len(project.Boards) > 6 {
 						project.BoardIndex = 6
-						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
 				} else if keybindings.On(KBBoard8) {
 					if len(project.Boards) > 7 {
 						project.BoardIndex = 7
-						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
 				} else if keybindings.On(KBBoard9) {
 					if len(project.Boards) > 8 {
 						project.BoardIndex = 8
-						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
 				} else if keybindings.On(KBBoard10) {
 					if len(project.Boards) > 9 {
 						project.BoardIndex = 9
-						project.Log("Switched to Board: %s.", project.CurrentBoard().Name)
 					}
 				} else if keybindings.On(KBCenterView) {
 					project.CameraPan.X = 0
@@ -1431,8 +1324,6 @@ func (project *Project) Shortcuts() {
 					for _, task := range project.CurrentBoard().Tasks {
 						task.Selected = true
 					}
-
-					project.Log("Selected all %d Task(s).", len(project.CurrentBoard().Tasks))
 
 				} else if keybindings.On(KBCopyTasks) {
 					project.CurrentBoard().CopySelectedTasks()
@@ -1455,28 +1346,6 @@ func (project *Project) Shortcuts() {
 						project.UndoFade.Reset()
 						project.Undoing = -1
 					}
-				} else if keybindings.On(KBStopAllSounds) {
-
-					for _, task := range project.GetAllTasks() {
-						task.StopSound()
-					}
-					project.Log("Stopped all playing Sounds.")
-
-				} else if keybindings.On(KBToggleTasks) {
-
-					toggleCount := 0
-
-					for _, task := range project.CurrentBoard().SelectedTasks(false) {
-						if task.Completable() {
-							toggleCount++
-						}
-						task.SetCompletion(!task.Complete())
-					}
-
-					if toggleCount > 0 {
-						project.Log("Completion toggled on %d Task(s).", toggleCount)
-					}
-
 				} else if keybindings.On(KBDeleteTasks) {
 					project.CurrentBoard().DeleteSelectedTasks()
 				} else if keybindings.On(KBFocusOnTasks) {
@@ -1649,7 +1518,6 @@ func (project *Project) Shortcuts() {
 					}
 				} else if keybindings.On(KBDeselectTasks) {
 					project.SendMessage(MessageSelect, nil)
-					project.Log("Deselected all Task(s).")
 				} else if keybindings.On(KBSelectTopTaskInStack) {
 					for _, task := range project.CurrentBoard().SelectedTasks(true) {
 						next := task.TaskAbove
@@ -1768,7 +1636,6 @@ func (project *Project) GUI() {
 
 			if accept {
 				project.CurrentBoard().Name = textbox.Text()
-				project.Log("Renamed Board: %s", project.CurrentBoard().Name)
 				project.Modified = true
 				project.PopupAction = ""
 			}
@@ -1975,14 +1842,6 @@ func (project *Project) GUI() {
 			project.SettingsPanel.Columns[0].Mode = project.SettingsSection.CurrentChoice
 			project.SettingsPanel.Update()
 
-			if project.SoundVolume.Changed {
-
-				for _, t := range project.CurrentBoard().Tasks {
-					t.UpdateSoundVolume()
-				}
-
-			}
-
 			if project.SettingsSection.CurrentChoice == SETTINGS_KEYBOARD {
 
 				for i, shortcutName := range programSettings.Keybindings.creationOrder {
@@ -2087,22 +1946,6 @@ func (project *Project) GUI() {
 			if project.SettingsPanel.Exited {
 
 				project.ProjectSettingsOpen = false
-
-				if project.SampleRate.ChoiceAsInt() != project.SetSampleRate {
-
-					speaker.Init(beep.SampleRate(project.SampleRate.ChoiceAsInt()), project.SampleBuffer)
-					project.SetSampleRate = project.SampleRate.ChoiceAsInt()
-					project.Log("Project sample rate changed to %s.", project.SampleRate.ChoiceAsString())
-					project.Log("Currently playing sounds have been stopped and resampled as necessary.")
-
-					project.LogOn = false
-					for _, t := range project.CurrentBoard().Tasks {
-						if t.Is(TASK_TYPE_SOUND) {
-							t.LoadResource() // Force reloading to resample as necessary
-						}
-					}
-					project.LogOn = true
-				}
 
 				programSettings.AutoloadLastPlan = project.AutoLoadLastProject.Checked
 				programSettings.DisableSplashscreen = project.DisableSplashscreen.Checked

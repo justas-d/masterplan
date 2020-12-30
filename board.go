@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
   "os/exec"
-  "log"
   "path/filepath"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -51,38 +50,6 @@ func (board *Board) CreateNewTask() *Task {
 	newTask.Rect.X, newTask.Rect.Y = newTask.Position.X, newTask.Position.Y
 	board.Tasks = append(board.Tasks, newTask)
 
-	selected := board.SelectedTasks(true)
-
-	if len(selected) > 0 && !board.Project.JustLoaded {
-		// If the project is loading, then we want to put everything back where it was
-		task := selected[0]
-		gs := float32(board.Project.GridSize)
-		x := task.Position.X
-
-		if task.Numberable() {
-
-			if task.TaskBelow != nil && task.TaskBelow.Numberable() && task.Numberable() {
-
-				for i, t := range task.RestOfStack {
-
-					if i == 0 {
-						x = t.Position.X
-					}
-
-					t.Position.Y += gs
-				}
-
-			}
-
-			newTask.Position = task.Position
-
-			newTask.Position.X = x
-			newTask.Position.Y = task.Position.Y + gs
-
-		}
-
-	}
-
 	board.ReorderTasks()
 
 	newTask.TaskType.SetChoice(board.Project.PreviousTaskType)
@@ -92,12 +59,6 @@ func (board *Board) CreateNewTask() *Task {
 	} else {
 		newTask.Description.Focused = true
 	}
-
-	if newTask.Is(TASK_TYPE_MAP) {
-		newTask.MapImage = NewMapImage(newTask)
-	}
-
-	board.Project.Log("Created 1 new Task.")
 
 	// We need to record both the Task being invalid, as well as being valid, for undoing / redoing
 	newTask.Valid = false
@@ -172,10 +133,7 @@ func (board *Board) DeleteSelectedTasks() {
 		board.UndoBuffer.Capture(s)
 	}
 
-	board.Project.Log("Deleted %d Task(s).", count)
-
 	board.ReorderTasks()
-
 }
 
 func (board *Board) FocusViewOnSelectedTasks() {
@@ -224,17 +182,10 @@ func (board *Board) HandleDroppedFiles() {
 				success := true
 
 				if strings.Contains(taskType.String(), "image") {
-					board.Project.Log("Added Image for [%s] successfully.", filePath)
 					task.TaskType.CurrentChoice = TASK_TYPE_IMAGE
 					task.FilePathTextbox.SetText(filePath)
 					task.LoadResource()
-				} else if strings.Contains(taskType.String(), "audio") {
-					board.Project.Log("Added Sound for [%s] successfully.", filePath)
-					task.TaskType.CurrentChoice = TASK_TYPE_SOUND
-					task.FilePathTextbox.SetText(filePath)
-					task.LoadResource()
 				} else if strings.HasPrefix(taskType.String(), "text/") {
-					board.Project.Log("Added Note for [%s] successfully.", filePath)
 
 					// Attempt to read it in
 					data, err := ioutil.ReadFile(filePath)
@@ -270,19 +221,13 @@ func (board *Board) CopySelectedTasks() {
 	for _, task := range board.SelectedTasks(false) {
 		board.Project.CopyBuffer = append(board.Project.CopyBuffer, task)
 	}
-
-	board.Project.Log("Copied %d Task(s).", len(board.Project.CopyBuffer))
-
 }
 
 func (board *Board) CutSelectedTasks() {
-
 	board.Project.LogOn = false
 	board.CopySelectedTasks()
 	board.Project.LogOn = true
 	board.Project.Cutting = true
-	board.Project.Log("Cut %d Task(s).", len(board.Project.CopyBuffer))
-
 }
 
 func (board *Board) PasteTasks() {
@@ -355,10 +300,6 @@ func (board *Board) PasteTasks() {
 
 		board.ReorderTasks()
 
-		if len(clones) > 0 {
-			board.Project.Log("Pasted %d Task(s).", len(clones))
-		}
-
 		for _, clone := range clones {
 			if clone.Is(TASK_TYPE_LINE) && len(clone.LineEndings) > 0 {
 				clones = append(clones, clone.LineEndings...)
@@ -396,8 +337,7 @@ func (board *Board) PasteContent() {
   // TODO(justasd): :Portability
   result, err := exec.Command("xclip", "-t", "TARGETS", "-o").CombinedOutput()
   if err != nil {
-    log.Println("Failed to get targets from xclip")
-    log.Println(err)
+    board.Project.Log("Failed to get target data from xclip: '%s'.", err)
     return
   }
 
@@ -407,8 +347,7 @@ func (board *Board) PasteContent() {
   get_clipboard_data := func(target string) ([]byte, error) {
     result, err := exec.Command("xclip", "-t", target, "-o").CombinedOutput()
     if err != nil {
-      log.Println("Failed to get paste data from xclip")
-      log.Println(err)
+      board.Project.Log("Failed to get clipboard data from xclip: '%s'.", err)
       return nil, err
     }
 
@@ -444,7 +383,7 @@ func (board *Board) PasteContent() {
       save_path := filepath.Join(dir, id) + ".png"
       err = ioutil.WriteFile(save_path, img_data, 0644)
       if err != nil {
-        fmt.Printf("Failed to save image file to '%s'", save_path)
+        board.Project.Log("Failed to save iamge file to '%s'.", save_path)
         return
       }
 
@@ -478,8 +417,6 @@ func (board *Board) ReorderTasks() {
 	prevOn := board.UndoBuffer.On
 	board.UndoBuffer.On = false
 	board.SendMessage(MessageDropped, nil)
-	board.SendMessage(MessageNeighbors, nil)
-	board.SendMessage(MessageNumbering, nil)
 	board.UndoBuffer.On = prevOn
 
 }

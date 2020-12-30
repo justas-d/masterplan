@@ -284,11 +284,6 @@ func NewUndoState(task *Task) *UndoState {
 
 	state.Status, _ = sjson.Delete(state.Status, "LineEndings") // We don't want line endings to be serialized
 
-	// Sounds should be forced to not pause when undoing / redoing.
-	if task.SoundControl != nil {
-		state.Status, _ = sjson.Set(state.Status, `SoundPaused`, task.SoundControl.Paused)
-	}
-
 	return state
 }
 
