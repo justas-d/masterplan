@@ -163,7 +163,7 @@ func (project *Project) Save(backup bool) {
 
     // Not handling any of these errors because uuuuuuuuuh idkkkkkk should there ever really be errors
     // with a blank JSON {} object????
-    data, _ = sjson.Set(data, `Version`, softwareVersion.String())
+    data, _ = sjson.Set(data, `Version`, softwareVersion)
     data, _ = sjson.Set(data, `BoardIndex`, project.BoardIndex)
     data, _ = sjson.Set(data, `BoardCount`, len(project.Boards))
     data, _ = sjson.Set(data, `Pan\.X`, project.CameraPan.X)
