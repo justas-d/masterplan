@@ -11,10 +11,12 @@ require (
 	github.com/faiface/beep v1.0.2
 	github.com/gabriel-vasile/mimetype v1.1.0
 	github.com/gen2brain/raylib-go v0.0.0-20200528082952-e0f56b22753f
+	github.com/go-gl/gl v0.0.0-20190320180904-bf2b1f2f34d7
 	github.com/gofrs/uuid v3.3.0+incompatible
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/goware/urlx v0.3.1
 	github.com/hako/durafmt v0.0.0-20191009132224-3f39dc1ed9f4
+	github.com/inkyblackness/imgui-go/v3 v3.0.0
 	github.com/mholt/archiver v3.1.1+incompatible
 	github.com/ncruces/zenity v0.4.2
 	github.com/nwaples/rardecode v1.0.0 // indirect

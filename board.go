@@ -24,7 +24,6 @@ type Board struct {
 	Project       *Project
 	Name          string
 	TaskLocations map[Position][]*Task
-	UndoBuffer    *UndoBuffer
 }
 
 func NewBoard(project *Project) *Board {
@@ -34,8 +33,6 @@ func NewBoard(project *Project) *Board {
 		Name:          fmt.Sprintf("Board %d", len(project.Boards)+1),
 		TaskLocations: map[Position][]*Task{},
 	}
-
-	board.UndoBuffer = NewUndoBuffer(board)
 
 	return board
 }
@@ -52,19 +49,7 @@ func (board *Board) CreateNewTask() *Task {
 
 	board.ReorderTasks()
 
-	newTask.TaskType.SetChoice(board.Project.PreviousTaskType)
-
-	if newTask.TaskType.ChoiceAsString() == "Image" || newTask.TaskType.ChoiceAsString() == "Sound" {
-		newTask.FilePathTextbox.Focused = true
-	} else {
-		newTask.Description.Focused = true
-	}
-
-	// We need to record both the Task being invalid, as well as being valid, for undoing / redoing
-	newTask.Valid = false
-	board.UndoBuffer.Capture(newTask)
-	newTask.Valid = true
-	board.UndoBuffer.Capture(newTask)
+	newTask.TaskType = board.Project.PreviousTaskType
 
 	if !board.Project.JustLoaded {
 		// If we're loading a project, we don't want to automatically select new tasks
@@ -75,32 +60,13 @@ func (board *Board) CreateNewTask() *Task {
 }
 
 func (board *Board) DeleteTask(task *Task) {
-
-	if task.Valid {
-
-		board.UndoBuffer.Capture(task)
-		task.Valid = false
-		board.UndoBuffer.Capture(task)
-
-		board.ToBeDeleted = append(board.ToBeDeleted, task)
-		task.ReceiveMessage(MessageDelete, map[string]interface{}{"task": task})
-	}
-
+  board.ToBeDeleted = append(board.ToBeDeleted, task)
+  task.ReceiveMessage(MessageDelete, map[string]interface{}{"task": task})
 }
 
 func (board *Board) RestoreTask(task *Task) {
-
-	if !task.Valid {
-
-		board.UndoBuffer.Capture(task)
-		task.Valid = true
-		board.UndoBuffer.Capture(task)
-
-		board.ToBeRestored = append(board.ToBeRestored, task)
-		task.ReceiveMessage(MessageDropped, map[string]interface{}{"task": task})
-
-	}
-
+  board.ToBeRestored = append(board.ToBeRestored, task)
+  task.ReceiveMessage(MessageDropped, map[string]interface{}{"task": task})
 }
 
 func (board *Board) DeleteSelectedTasks() {
@@ -160,16 +126,16 @@ func (board *Board) HandleDroppedFiles() {
 				success := true
 
 				if strings.Contains(taskType.String(), "image") {
-					task.TaskType.CurrentChoice = TASK_TYPE_IMAGE
-					task.FilePathTextbox.SetText(filePath)
+					task.TaskType = TASK_TYPE_IMAGE
+					task.FilePath = filePath
 					task.LoadResource()
 				} else if strings.HasPrefix(taskType.String(), "text/") {
 
 					// Attempt to read it in
 					data, err := ioutil.ReadFile(filePath)
 					if err == nil {
-						task.Description.SetText(string(data))
-						task.TaskType.CurrentChoice = TASK_TYPE_NOTE
+						task.Description = string(data)
+						task.TaskType = TASK_TYPE_NOTE
 					}
 
 				} else {
@@ -212,8 +178,6 @@ func (board *Board) PasteTasks() {
 
 	if len(board.Project.CopyBuffer) > 0 {
 
-		board.UndoBuffer.On = false
-
 		for _, task := range board.Tasks {
 			task.Selected = false
 		}
@@ -231,15 +195,6 @@ func (board *Board) PasteTasks() {
 			return clone
 		}
 
-		copied := func(task *Task) bool {
-			for _, copy := range board.Project.CopyBuffer {
-				if copy == task {
-					return true
-				}
-			}
-			return false
-		}
-
 		center := rl.Vector2{}
 
 		for _, t := range board.Project.CopyBuffer {
@@ -254,45 +209,15 @@ func (board *Board) PasteTasks() {
 
 		for _, srcTask := range board.Project.CopyBuffer {
 
-			if srcTask.Is(TASK_TYPE_LINE) && srcTask.LineBase != nil && srcTask.Board != board {
-				if !copied(srcTask.LineBase) {
-					board.Project.Log("WARNING: Cannot paste Line arrows on a different board than the Line base.")
-				}
-			} else if srcTask.LineBase == nil || !copied(srcTask.LineBase) {
-
-				clone := cloneTask(srcTask)
-				diff := rl.Vector2Subtract(GetWorldMousePosition(), center)
-				clone.Position = rl.Vector2Add(clone.Position, diff)
-				clone.Position = board.Project.LockPositionToGrid(clone.Position)
-
-				if clone.Is(TASK_TYPE_LINE) {
-					for _, ending := range clone.LineEndings {
-						ending.Position = rl.Vector2Add(ending.Position, diff)
-						ending.Position = board.Project.LockPositionToGrid(ending.Position)
-					}
-				}
-
-			}
-
+      clone := cloneTask(srcTask)
+      diff := rl.Vector2Subtract(GetWorldMousePosition(), center)
+      clone.Position = rl.Vector2Add(clone.Position, diff)
+      clone.Position = board.Project.LockPositionToGrid(clone.Position)
 		}
 
 		board.ReorderTasks()
 
 		for _, clone := range clones {
-			if clone.Is(TASK_TYPE_LINE) && len(clone.LineEndings) > 0 {
-				clones = append(clones, clone.LineEndings...)
-			}
-		}
-
-		board.UndoBuffer.On = true
-
-		for _, clone := range clones {
-
-			clone.Valid = false
-			board.UndoBuffer.Capture(clone)
-			clone.Valid = true
-			board.UndoBuffer.Capture(clone)
-
 			clone.Selected = true
 		}
 
@@ -337,13 +262,12 @@ func (board *Board) PasteContent() {
   for _, target := range targets {
     if strings.EqualFold(target, "STRING") {
       task := board.CreateNewTask()
-      task.TaskType.CurrentChoice = TASK_TYPE_NOTE
+      task.TaskType = TASK_TYPE_NOTE
 
       result, err := get_clipboard_data(target)
       if err != nil { return }
 
-      str := string(result[:])
-			task.Description.SetText(str)
+			task.Description = string(result[:])
 
       break
     }
@@ -368,8 +292,8 @@ func (board *Board) PasteContent() {
       fmt.Printf("Saved image to '%s'\n", save_path)
 
       task := board.CreateNewTask()
-      task.TaskType.CurrentChoice = TASK_TYPE_IMAGE
-      task.FilePathTextbox.SetText(save_path)
+      task.TaskType = TASK_TYPE_IMAGE
+      task.FilePath = save_path
       task.LoadResource()
 
       break
@@ -389,14 +313,6 @@ func (board *Board) ReorderTasks() {
 		}
 		return ba.Position.Y < bb.Position.Y
 	})
-
-	// Reordering Tasks should not alter the Undo Buffer, as altering the Undo Buffer generally happens explicitly
-
-	prevOn := board.UndoBuffer.On
-	board.UndoBuffer.On = false
-	board.SendMessage(MessageDropped, nil)
-	board.UndoBuffer.On = prevOn
-
 }
 
 // Returns the index of the board in the Project's Board stack

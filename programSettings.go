@@ -17,37 +17,18 @@ const (
 
 type ProgramSettings struct {
 	RecentPlanList            []string
-	TargetFPS                 int
-	UnfocusedFPS              int
-	ScreenshotsPath           string
 	AutoloadLastPlan          bool
-	AutoReloadThemes          bool
-	DisableSplashscreen       bool
-	DisableMessageLog         bool
-	DisableAboutDialogOnStart bool
-	AutoReloadResources       bool
-	TransparentBackground     bool
-	BorderlessWindow          bool
 	WindowPosition            rl.Rectangle
 	SaveWindowPosition        bool
-	SmoothPanning             bool
-	CustomFontPath            string
-	FontSize                  int
-	GUIFontSizeMultiplier     string
 	Keybindings               *Keybindings
 }
 
 func NewProgramSettings() ProgramSettings {
 	ps := ProgramSettings{
 		RecentPlanList:         []string{},
-		TargetFPS:              60,
-		UnfocusedFPS:           10,
 		WindowPosition:         rl.NewRectangle(-1, -1, 0, 0),
 		SaveWindowPosition:     true,
-		SmoothPanning:          true,
 		Keybindings:            NewKeybindings(),
-		FontSize:               15,
-		GUIFontSizeMultiplier:  GUI_FONT_SIZE_200,
 	}
 	return ps
 }
